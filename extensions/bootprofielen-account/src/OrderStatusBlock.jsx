@@ -39,7 +39,11 @@ function Extension() {
       setMessage(
         json.success
           ? 'Bootprofiel opgeslagen.'
-          : 'Opslaan mislukt. Controleer de velden.',
+          : `Opslaan mislukt: ${json.message || 'Onbekende fout'}${
+              json.errors?.length
+                ? ' — ' + json.errors.map((error) => error.message).join(', ')
+                : ''
+            }`,
       );
     } catch {
       setMessage('Opslaan mislukt. API niet bereikbaar.');
