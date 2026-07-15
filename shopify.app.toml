@@ -2,7 +2,7 @@
 
 client_id = "47eb38dfb2e4337cb59c85e938937cc9"
 name = "Bootprofielen"
-application_url = "https://shopify.dev/apps/default-app-home"
+application_url = "https://bootprofielen.onrender.com"
 embedded = true
 
 [build]
@@ -25,9 +25,9 @@ scopes = "read_apps,read_channels,write_channels,read_publications,write_publica
 
 [auth]
 redirect_urls = [
-  "https://shopify.dev/apps/default-app-home/auth/callback",
-  "https://shopify.dev/apps/default-app-home/auth/shopify/callback",
-  "https://shopify.dev/apps/default-app-home/api/auth/callback"
+  "https://bootprofielen.onrender.com/auth/callback",
+  "https://bootprofielen.onrender.com/auth/shopify/callback",
+  "https://bootprofielen.onrender.com/api/auth/callback"
 ]
 
 [product.metafields.app.demo_info]
