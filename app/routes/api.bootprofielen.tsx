@@ -340,12 +340,17 @@ export async function action({request}: ActionFunctionArgs) {
       }),
     );
   } catch (error: any) {
-    console.error("Bootprofiel API-fout:", error);
+    console.error("========== BOOTPROFIEL ERROR ==========");
+    console.error(error);
+
+    if (error?.stack) {
+      console.error(error.stack);
+    }
 
     return jsonResponse(
       {
         success: false,
-        message: error?.message || "Onbekende fout",
+        message: error?.message ?? String(error),
       },
       500,
     );
