@@ -23,7 +23,19 @@ function Extension() {
     setMessage('');
 
     try {
+      setMessage('Stap 1: sessietoken ophalen...');
+
+      if (!globalThis.shopify?.sessionToken?.get) {
+        throw new Error('Shopify sessionToken API is niet beschikbaar');
+      }
+
       const token = await globalThis.shopify.sessionToken.get();
+
+      if (!token) {
+        throw new Error('Shopify gaf geen sessietoken terug');
+      }
+
+      setMessage('Stap 2: gegevens naar server sturen...');
 
       const response = await fetch(API_URL, {
         method: 'POST',
@@ -34,7 +46,16 @@ function Extension() {
         body: JSON.stringify(form),
       });
 
-      const json = await response.json();
+      const responseText = await response.text();
+
+      let json;
+      try {
+        json = JSON.parse(responseText);
+      } catch {
+        throw new Error(
+          `Server gaf geen geldige JSON terug (${response.status}): ${responseText.slice(0, 200)}`
+        );
+      }
 
       setMessage(
         json.success
@@ -45,8 +66,8 @@ function Extension() {
                 : ''
             }`,
       );
-    } catch {
-      setMessage('Opslaan mislukt. API niet bereikbaar.');
+    } catch (error) {
+      setMessage(`Opslaan mislukt vóór de server: ${error?.message || String(error)}`);
     } finally {
       setSaving(false);
     }
