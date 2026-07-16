@@ -75,7 +75,7 @@ function Extension() {
 
   return (
     <s-stack gap="base">
-      <s-heading>Mijn bootdossier</s-heading>
+      <s-heading>Mijn bootdossier — TESTVERSIE 5</s-heading>
 
       <s-button onClick={() => setOpen(!open)}>
         {open ? '▼ Bootprofiel verbergen' : '▶ Bootprofiel openen'}
