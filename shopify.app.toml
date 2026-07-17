@@ -53,3 +53,33 @@ required = true
 [metaobjects.app.example.fields.description]
 name = "Description"
 type = "multi_line_text_field"
+
+[metaobjects.app.bootprofiel]
+name = "Bootprofiel"
+description = "Persoonlijk bootprofiel van een WetterWinkel-klant"
+
+  [metaobjects.app.bootprofiel.access]
+  admin = "merchant_read_write"
+
+[metaobjects.app.bootprofiel.fields.naam]
+name = "Naam boot"
+type = "single_line_text_field"
+required = true
+
+[metaobjects.app.bootprofiel.fields.data]
+name = "Bootgegevens"
+type = "json"
+required = true
+
+[metaobjects.app.bootprofiel.fields.klant_id]
+name = "Shopify klant-ID"
+type = "single_line_text_field"
+required = true
+
+[customer.metafields.app.bootprofielen]
+name = "Bootprofielen"
+description = "Bootprofielen die bij deze klant horen"
+type = "list.metaobject_reference<$app:bootprofiel>"
+
+  [customer.metafields.app.bootprofielen.access]
+  admin = "merchant_read_write"
