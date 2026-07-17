@@ -1,9 +1,11 @@
 import '@shopify/ui-extensions/preact';
-import {render} from 'preact';
-import {useState} from 'preact/hooks';
+import {createContext, render} from 'preact';
+import {useContext, useEffect, useState} from 'preact/hooks';
 
 const API_URL =
   'https://bootprofielen.onrender.com/api/bootprofielen';
+
+const FormContext = createContext({form: {}, update: () => {}});
 
 export default function extension() {
   render(<Extension />, document.body);
@@ -12,62 +14,97 @@ export default function extension() {
 function Extension() {
   const [open, setOpen] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState({});
+  const [profiles, setProfiles] = useState([]);
+  const [activeId, setActiveId] = useState('');
 
   const update = (key, value) =>
     setForm((old) => ({...old, [key]: value}));
+
+  async function api(method, body) {
+    const token = await globalThis.shopify.sessionToken.get();
+    const result = await fetch(API_URL, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      ...(body ? {body: JSON.stringify(body)} : {}),
+    });
+    const json = await result.json().catch(() => ({}));
+    if (!result.ok || !json.success) {
+      throw new Error(json.message || 'De server kon de aanvraag niet verwerken.');
+    }
+    return json;
+  }
+
+  useEffect(() => {
+    api('GET')
+      .then((json) => {
+        const items = json.profiles || [];
+        setProfiles(items);
+        if (items[0]) {
+          setActiveId(items[0].id);
+          setForm(items[0].data || {});
+        }
+      })
+      .catch((error) => setMessage(error.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function selectProfile(id) {
+    const selected = profiles.find((profile) => profile.id === id);
+    setActiveId(id);
+    setForm(selected?.data || {});
+    setMessage('');
+  }
+
+  function newProfile() {
+    setActiveId('');
+    setForm({});
+    setMessage('Nieuw bootprofiel geopend.');
+  }
 
   async function saveBootprofiel() {
     setSaving(true);
     setMessage('');
 
     try {
-      setMessage('Stap 1: sessietoken ophalen...');
-
-      if (!globalThis.shopify?.sessionToken?.get) {
-        throw new Error('Shopify sessionToken API is niet beschikbaar');
-      }
-
-      const token = await globalThis.shopify.sessionToken.get();
-
-      if (!token) {
-        throw new Error('Shopify gaf geen sessietoken terug');
-      }
-
-      setMessage('Stap 2: gegevens naar server sturen...');
-
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(form),
+      const json = activeId
+        ? await api('PATCH', {id: activeId, data: form})
+        : await api('POST', form);
+      const saved = json.profile;
+      setActiveId(saved.id);
+      setProfiles((old) => {
+        const exists = old.some((profile) => profile.id === saved.id);
+        return exists
+          ? old.map((profile) => profile.id === saved.id ? saved : profile)
+          : [...old, saved];
       });
-
-      const responseText = await response.text();
-
-      let json;
-      try {
-        json = JSON.parse(responseText);
-      } catch {
-        throw new Error(
-          `Server gaf geen geldige JSON terug (${response.status}): ${responseText.slice(0, 200)}`
-        );
-      }
-
-      setMessage(
-        json.success
-          ? 'Bootprofiel opgeslagen.'
-          : `Opslaan mislukt: ${json.message || 'Onbekende fout'}${
-              json.errors?.length
-                ? ' — ' + json.errors.map((error) => error.message).join(', ')
-                : ''
-            }`,
-      );
+      setMessage(json.message || 'Bootprofiel opgeslagen.');
     } catch (error) {
-      setMessage(`Opslaan mislukt vóór de server: ${error?.message || String(error)}`);
+      console.error('Bootprofiel opslaan mislukt', error);
+      setMessage('Opslaan mislukt. De verbinding met de server werkt niet.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteProfile() {
+    if (!activeId || saving) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      const json = await api('DELETE', {id: activeId});
+      const remaining = profiles.filter((profile) => profile.id !== activeId);
+      setProfiles(remaining);
+      setActiveId(remaining[0]?.id || '');
+      setForm(remaining[0]?.data || {});
+      setMessage(json.message || 'Bootprofiel verwijderd.');
+    } catch (error) {
+      setMessage(error.message);
     } finally {
       setSaving(false);
     }
@@ -75,14 +112,28 @@ function Extension() {
 
   return (
     <s-stack gap="base">
-      <s-heading>Mijn bootdossier — TESTVERSIE 5</s-heading>
+      <s-heading>Mijn bootdossier</s-heading>
 
       <s-button onClick={() => setOpen(!open)}>
         {open ? '▼ Bootprofiel verbergen' : '▶ Bootprofiel openen'}
       </s-button>
 
       {open && (
+        <FormContext.Provider value={{form, update}}>
         <s-stack gap="base">
+          {loading && <s-text>Bootprofielen laden...</s-text>}
+
+          {profiles.length > 0 && (
+            <s-select label="Mijn boten" value={activeId} onChange={(event) => selectProfile(event.currentTarget.value)}>
+              {profiles.map((profile) => (
+                <s-option key={profile.id} value={profile.id}>
+                  {profile.data?.naam_schip || profile.data?.model_boot || 'Bootprofiel'}
+                </s-option>
+              ))}
+            </s-select>
+          )}
+
+          <s-button onClick={newProfile}>Nieuwe boot toevoegen</s-button>
           <s-heading>1. Basisgegevens</s-heading>
           <Field label="Naam schip" name="naam_schip" update={update} />
           <Field label="Merk boot" name="merk_boot" update={update} />
@@ -197,11 +248,14 @@ function Extension() {
           ].map((item) => <Check key={item} label={item} update={update} />)}
 
           <s-button onClick={saveBootprofiel} disabled={saving}>
-            {saving ? 'Opslaan...' : 'Bootprofiel opslaan'}
+            {saving ? 'Opslaan...' : activeId ? 'Wijzigingen opslaan' : 'Bootprofiel opslaan'}
           </s-button>
+
+          {activeId && <s-button onClick={deleteProfile} disabled={saving}>Bootprofiel verwijderen</s-button>}
 
           {message && <s-text>{message}</s-text>}
         </s-stack>
+        </FormContext.Provider>
       )}
 
       <s-button disabled>▶ Serviceboek komt later</s-button>
@@ -211,9 +265,11 @@ function Extension() {
 }
 
 function Field({label, name, update}) {
+  const {form} = useContext(FormContext);
   return (
     <s-text-field
       label={label}
+      value={form[name] ?? ''}
       onInput={(event) => update(name, event.currentTarget.value)}
       onChange={(event) => update(name, event.currentTarget.value)}
     />
@@ -221,9 +277,11 @@ function Field({label, name, update}) {
 }
 
 function Select({label, name, options, update}) {
+  const {form} = useContext(FormContext);
   return (
     <s-select
       label={label}
+      value={form[name] ?? options[0]}
       onInput={(event) => update(name, event.currentTarget.value)}
       onChange={(event) => update(name, event.currentTarget.value)}
     >
@@ -237,11 +295,13 @@ function Select({label, name, options, update}) {
 }
 
 function Check({label, update}) {
+  const {form} = useContext(FormContext);
   const key = label.toLowerCase().replaceAll(' ', '_').replaceAll('/', '_');
 
   return (
     <s-checkbox
       label={label}
+      checked={Boolean(form[key])}
       onChange={(event) => update(key, event.currentTarget.checked)}
     />
   );
