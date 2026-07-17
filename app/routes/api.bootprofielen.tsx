@@ -13,24 +13,11 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
-export async function loader({request}: LoaderFunctionArgs) {
+export async function loader(_args: LoaderFunctionArgs) {
   return jsonResponse({
     success: true,
     message: "Bootprofielen API werkt",
   });
-}
-
-function hasValue(value: unknown) {
-  return value !== undefined && value !== null && value !== "";
-}
-
-function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 }
 
 export async function action({request}: ActionFunctionArgs) {
@@ -43,197 +30,73 @@ export async function action({request}: ActionFunctionArgs) {
       await authenticate.public.customerAccount(request);
 
     const customerId = (sessionToken as any).sub;
-    const shop = new URL((sessionToken as any).dest).hostname;
+    const destination = (sessionToken as any).dest;
 
     if (!customerId) {
       return cors(
         jsonResponse(
-          {success: false, message: "Geen klant gevonden"},
+          {
+            success: false,
+            message: "Geen klant gevonden",
+          },
           401,
         ),
       );
     }
 
-    const data = await request.json();
-    const {admin} = await unauthenticated.admin(shop);
-
-    async function getReferenceId(type: string, label: unknown) {
-      if (!hasValue(label)) return null;
-
-      const handle = slugify(String(label));
-
-      const result = await admin.graphql(
-        `#graphql
-          query GetMetaobjectReference($handle: MetaobjectHandleInput!) {
-            metaobjectByHandle(handle: $handle) {
-              id
-            }
-          }
-        `,
-        {
-          variables: {
-            handle: {
-              type,
-              handle,
-            },
+    if (!destination) {
+      return cors(
+        jsonResponse(
+          {
+            success: false,
+            message: "Geen Shopify-winkel gevonden in het sessietoken",
           },
-        },
+          401,
+        ),
       );
-
-      const resultJson = await result.json();
-      return resultJson.data?.metaobjectByHandle?.id ?? null;
     }
 
-    const [
-      boottypeId,
-      materiaalRompId,
-      brandstofId,
-      vaargebiedId,
-      winterstallingId,
-    ] = await Promise.all([
-      getReferenceId("boottype_optie", data.boottype),
-      getReferenceId("materiaal_romp_optie", data.materiaal_romp),
-      getReferenceId("brandstof_optie", data.brandstof),
-      getReferenceId("vaargebied_optie", data.vaargebied),
-      getReferenceId("winterstalling_optie", data.winterstalling),
-    ]);
+    const shop = new URL(destination).hostname;
+    const data = await request.json();
 
-    const fields = [
-      hasValue(data.naam_schip)
-        ? {key: "naam_schip", value: String(data.naam_schip)}
-        : null,
+    console.log("========== BOOTPROFIEL REQUEST ==========");
+    console.log("SHOP:", shop);
+    console.log("CUSTOMER:", customerId);
 
-      hasValue(data.merk_boot)
-        ? {key: "merk_boot", value: String(data.merk_boot)}
-        : null,
+    const {admin} = await unauthenticated.admin(shop);
 
-      hasValue(data.model_boot)
-        ? {key: "model_boot", value: String(data.model_boot)}
-        : null,
+    console.log("Admin-client opgehaald. Testquery wordt uitgevoerd.");
 
-      hasValue(data.bouwjaar_boot)
-        ? {key: "bouwjaar", value: String(data.bouwjaar_boot)}
-        : null,
-
-      hasValue(data.lengte)
-        ? {key: "lengte_boot_cm", value: String(data.lengte)}
-        : null,
-
-      hasValue(data.breedte)
-        ? {key: "breedte_boot_cm", value: String(data.breedte)}
-        : null,
-
-      hasValue(data.diepgang)
-        ? {key: "diepgang_cm", value: String(data.diepgang)}
-        : null,
-
-      hasValue(data.doorvaarthoogte)
-        ? {
-            key: "doorvaarthoogte_cm",
-            value: String(data.doorvaarthoogte),
+    const testResult = await admin.graphql(
+      `#graphql
+        query TestAdminConnection {
+          shop {
+            name
+            myshopifyDomain
           }
-        : null,
+        }
+      `,
+    );
 
-      hasValue(data.waterverplaatsing)
-        ? {
-            key: "waterverplaatsing_kg",
-            value: String(data.waterverplaatsing),
-          }
-        : null,
+    console.log("ADMIN STATUS:", testResult.status);
 
-      hasValue(data.aantal_motoren)
-        ? {key: "aantal_motoren", value: String(data.aantal_motoren)}
-        : null,
+    const testJson = await testResult.json();
 
-      hasValue(data.soort_motor)
-        ? {key: "motortype", value: String(data.soort_motor)}
-        : null,
+    console.log("ADMIN RESPONSE:");
+    console.log(JSON.stringify(testJson, null, 2));
 
-      hasValue(data.bouwjaar_motor)
-        ? {key: "bouwjaar_motor", value: String(data.bouwjaar_motor)}
-        : null,
-
-      hasValue(data.motorvermogen)
-        ? {
-            key: "motorvermogen_totaal_pk",
-            value: String(data.motorvermogen),
-          }
-        : null,
-
-      hasValue(data.ligplaats)
-        ? {key: "ligplaats", value: String(data.ligplaats)}
-        : null,
-
-      hasValue(data.vaardagen_per_jaar)
-        ? {
-            key: "aantal_vaardagen_per_jaar",
-            value: String(data.vaardagen_per_jaar),
-          }
-        : null,
-
-      hasValue(data.thuishaven)
-        ? {key: "thuishaven", value: String(data.thuishaven)}
-        : null,
-
-      hasValue(data.boegschroef)
-        ? {
-            key: "boegschroef_aanwezig",
-            value: String(Boolean(data.boegschroef)),
-          }
-        : null,
-
-      hasValue(data.hekschroef)
-        ? {
-            key: "hekschroef_aanwezig",
-            value: String(Boolean(data.hekschroef)),
-          }
-        : null,
-
-      hasValue(data.zonnepanelen)
-        ? {
-            key: "zonnepanelen_aanwezig",
-            value: String(Boolean(data.zonnepanelen)),
-          }
-        : null,
-
-      hasValue(data.omvormer)
-        ? {
-            key: "omvormer_aanwezig",
-            value: String(Boolean(data.omvormer)),
-          }
-        : null,
-
-      hasValue(data.marifoon)
-        ? {
-            key: "marifoon_aanwezig",
-            value: String(Boolean(data.marifoon)),
-          }
-        : null,
-
-      hasValue(data.motormerk)
-        ? {key: "motormerk", value: String(data.motormerk)}
-        : null,
-
-      boottypeId
-        ? {key: "boottype", value: boottypeId}
-        : null,
-
-      materiaalRompId
-        ? {key: "materiaal_romp", value: materiaalRompId}
-        : null,
-
-      brandstofId
-        ? {key: "brandstof", value: brandstofId}
-        : null,
-
-      vaargebiedId
-        ? {key: "vaargebied", value: vaargebiedId}
-        : null,
-
-      winterstallingId
-        ? {key: "winterstalling", value: winterstallingId}
-        : null,
-    ].filter(Boolean);
+    if (testJson.errors?.length) {
+      return cors(
+        jsonResponse(
+          {
+            success: false,
+            message: "De verbinding met de Shopify Admin API is mislukt",
+            graphqlErrors: testJson.errors,
+          },
+          502,
+        ),
+      );
+    }
 
     const createResult = await admin.graphql(
       `#graphql
@@ -255,18 +118,54 @@ export async function action({request}: ActionFunctionArgs) {
         variables: {
           metaobject: {
             type: "bootprofiel",
-            fields,
+            fields: [
+              {key: "naam_schip", value: String(data.naam_schip || "")},
+              {key: "merk_boot", value: String(data.merk_boot || "")},
+              {key: "model_boot", value: String(data.model_boot || "")},
+              {
+                key: "bouwjaar",
+                value: String(
+                  data.bouwjaar_boot ??
+                    data.bouwjaar ??
+                    "",
+                ),
+              },
+              {
+                key: "lengte_boot_cm",
+                value: String(
+                  data.lengte ??
+                    data.lengte_boot_cm ??
+                    "",
+                ),
+              },
+              {
+                key: "breedte_boot_cm",
+                value: String(
+                  data.breedte ??
+                    data.breedte_boot_cm ??
+                    "",
+                ),
+              },
+              {key: "ligplaats", value: String(data.ligplaats || "")},
+              {key: "thuishaven", value: String(data.thuishaven || "")},
+            ],
           },
         },
       },
     );
 
+    console.log("METAOBJECT CREATE STATUS:", createResult.status);
+
     const createJson = await createResult.json();
+
+    console.log("METAOBJECT CREATE RESPONSE:");
+    console.log(JSON.stringify(createJson, null, 2));
+
     const created = createJson.data?.metaobjectCreate?.metaobject;
     const createErrors =
       createJson.data?.metaobjectCreate?.userErrors || [];
 
-    if (!created || createErrors.length) {
+    if (!created || createErrors.length > 0) {
       return cors(
         jsonResponse(
           {
@@ -313,30 +212,41 @@ export async function action({request}: ActionFunctionArgs) {
       },
     );
 
+    console.log("METAFIELD LINK STATUS:", linkResult.status);
+
     const linkJson = await linkResult.json();
+
+    console.log("METAFIELD LINK RESPONSE:");
+    console.log(JSON.stringify(linkJson, null, 2));
+
     const linkErrors =
       linkJson.data?.metafieldsSet?.userErrors || [];
 
-    if (linkErrors.length) {
+    if (linkErrors.length > 0) {
       return cors(
         jsonResponse(
           {
             success: false,
             message:
-              "Bootprofiel aangemaakt, maar koppelen aan klant mislukt",
+              "Bootprofiel is aangemaakt, maar koppelen aan de klant is mislukt",
             bootprofielId: created.id,
             errors: linkErrors,
+            graphqlErrors: linkJson.errors || [],
           },
           400,
         ),
       );
     }
 
+    console.log("BOOTPROFIEL SUCCESVOL OPGESLAGEN:", created.id);
+    console.log("========================================");
+
     return cors(
       jsonResponse({
         success: true,
         message: "Bootprofiel opgeslagen",
         bootprofielId: created.id,
+        link: linkJson.data?.metafieldsSet,
       }),
     );
   } catch (error: any) {
@@ -350,7 +260,7 @@ export async function action({request}: ActionFunctionArgs) {
     return jsonResponse(
       {
         success: false,
-        message: error?.message ?? String(error),
+        message: error?.message || String(error) || "Onbekende fout",
       },
       500,
     );
