@@ -97,6 +97,33 @@ function parseAssistantAnswer(content) {
       ];
 }
 
+function parseStructuredAnswer(content) {
+  try {
+    const value = JSON.parse(String(content || ""));
+    if (!value || typeof value !== "object" || !value.summary) return null;
+
+    const list = (items, limit) =>
+      Array.isArray(items)
+        ? items.map(cleanAnswerText).filter(Boolean).slice(0, limit)
+        : [];
+    const allowedUrgencies = ["normal", "attention", "stop"];
+
+    return {
+      summary: cleanAnswerText(value.summary),
+      urgency: allowedUrgencies.includes(value.urgency)
+        ? value.urgency
+        : "normal",
+      safety: list(value.safety, 3),
+      causes: list(value.causes, 4),
+      checks: list(value.checks, 5),
+      solution: list(value.solution, 4),
+      followUp: cleanAnswerText(value.follow_up),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function answerTone(heading) {
   const value = heading.toLowerCase();
   if (/nood|brand|zink|direct stoppen/.test(value)) return "critical";
@@ -137,6 +164,60 @@ function AnswerBlocks({ blocks }) {
 }
 
 function AssistantAnswer({ content }) {
+  const structured = parseStructuredAnswer(content);
+  if (structured) {
+    const summaryTone =
+      structured.urgency === "stop"
+        ? "critical"
+        : structured.urgency === "attention"
+          ? "warning"
+          : "info";
+    const listBlocks = (items, type = "unordered") => [{ type, items }];
+
+    return (
+      <s-stack gap="base">
+        <s-banner heading="Kort antwoord" tone={summaryTone}>
+          <s-paragraph>{structured.summary}</s-paragraph>
+        </s-banner>
+
+        {structured.safety.length > 0 && (
+          <s-banner
+            heading={
+              structured.urgency === "stop" ? "Stop eerst" : "Eerst veilig"
+            }
+            tone={structured.urgency === "stop" ? "critical" : "warning"}
+          >
+            <AnswerBlocks blocks={listBlocks(structured.safety)} />
+          </s-banner>
+        )}
+
+        {structured.causes.length > 0 && (
+          <s-section heading="Waarschijnlijke oorzaken">
+            <AnswerBlocks blocks={listBlocks(structured.causes)} />
+          </s-section>
+        )}
+
+        {structured.checks.length > 0 && (
+          <s-section heading="Nu controleren">
+            <AnswerBlocks blocks={listBlocks(structured.checks, "ordered")} />
+          </s-section>
+        )}
+
+        {structured.solution.length > 0 && (
+          <s-section heading="Oplossing">
+            <AnswerBlocks blocks={listBlocks(structured.solution, "ordered")} />
+          </s-section>
+        )}
+
+        {structured.followUp && (
+          <s-banner heading="Nog één vraag" tone="neutral">
+            <s-paragraph>{structured.followUp}</s-paragraph>
+          </s-banner>
+        )}
+      </s-stack>
+    );
+  }
+
   const sections = parseAssistantAnswer(content);
   return (
     <s-stack gap="base">

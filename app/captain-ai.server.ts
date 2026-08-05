@@ -290,15 +290,17 @@ ${compact(
 Als deze lijst passende producten bevat, gebruik select_wetterwinkel_products met de exacte ID's. Als niets exact past, zoek zelf nog één keer met een korter synoniem; verzin geen match.
 
 ANTWOORDSTIJL
-Schrijf voor een moderne mobiele interface, niet als doorlopend rapport.
-- Begin direct met het antwoord; geen lange inleiding en geen herhaling van de vraag.
-- Gebruik maximaal vijf korte secties en bij voorkeur maximaal 450 woorden.
-- Gebruik precies passende koppen in deze vorm: "## Kort antwoord", waar nodig "## Eerst veilig", daarna bijvoorbeeld "## Waarschijnlijke oorzaak", "## Nu controleren", "## Oplossing" en tot slot "## Nog één vraag".
-- Zet handelingen in een genummerde lijst en korte controlepunten in bullets. Houd alinea's bij voorkeur onder drie zinnen.
-- Zet bronlinks en URL's niet in de antwoordtekst. De interface toont gebruikte bronnen afzonderlijk en inklapbaar.
-- Gebruik geen Markdown-tabellen. Gebruik vet alleen zeer spaarzaam; de interface bepaalt de visuele nadruk.
+Vul het verplichte gestructureerde antwoord compact in. De interface maakt van ieder veld een afzonderlijke visuele kaart.
+- summary: maximaal twee korte zinnen met het directe antwoord.
+- urgency: gebruik "stop" als de klant nu moet stoppen wegens direct veiligheids- of schaderisico, "attention" bij een belangrijk aandachtspunt en anders "normal".
+- safety: nul tot drie korte veiligheidsacties. Herhaal hier geen algemene disclaimer.
+- causes: nul tot vier waarschijnlijke oorzaken, meest waarschijnlijk eerst.
+- checks: nul tot vijf concrete controles in logische volgorde die de klant veilig zelf kan uitvoeren.
+- solution: nul tot vier korte oplossings- of vervolgstappen.
+- follow_up: maximaal één concrete vervolgvraag, of een lege tekst als geen vraag nodig is.
+- Houd het volledige antwoord bij voorkeur onder 350 woorden. Gebruik geen Markdown, koppen, tabellen, bronlinks of URL's in de velden.
 - Noem WetterWinkel-producten niet als tekstuele winkellijst. Selecteer ze met select_wetterwinkel_products; de interface toont dan klikbare productkaarten.
-- Gebruik metrische eenheden. Sluit alleen wanneer nuttig af met één concrete vervolgvraag.
+- Gebruik metrische eenheden.
 Zeg niet dat je een menselijke monteur of gecertificeerd expert bent.`;
 }
 
@@ -421,6 +423,54 @@ export async function answerCaptainQuestion(input: CaptainInput) {
       instructions: instructions(input, prefetchedProducts, opportunity),
       input: responseInput as any,
       tools,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "captain_ai_answer",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              summary: { type: "string" },
+              urgency: {
+                type: "string",
+                enum: ["normal", "attention", "stop"],
+              },
+              safety: {
+                type: "array",
+                items: { type: "string" },
+                maxItems: 3,
+              },
+              causes: {
+                type: "array",
+                items: { type: "string" },
+                maxItems: 4,
+              },
+              checks: {
+                type: "array",
+                items: { type: "string" },
+                maxItems: 5,
+              },
+              solution: {
+                type: "array",
+                items: { type: "string" },
+                maxItems: 4,
+              },
+              follow_up: { type: "string" },
+            },
+            required: [
+              "summary",
+              "urgency",
+              "safety",
+              "causes",
+              "checks",
+              "solution",
+              "follow_up",
+            ],
+          },
+        },
+      },
       store: false,
       include: [
         "web_search_call.action.sources",
