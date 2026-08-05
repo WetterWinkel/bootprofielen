@@ -12,6 +12,160 @@ function productPrice(product) {
   }).format(amount);
 }
 
+function cleanAnswerText(value) {
+  return String(value || "")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, "$1")
+    .replace(/https?:\/\/[^\s)]+/g, "")
+    .replace(/\((?:www\.)?[a-z0-9.-]+\.[a-z]{2,}\)/gi, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function parseAssistantAnswer(content) {
+  const sections = [];
+  let section = { heading: "Kort antwoord", blocks: [] };
+  let paragraph = [];
+
+  function flushParagraph() {
+    const text = cleanAnswerText(paragraph.join(" "));
+    if (text) section.blocks.push({ type: "paragraph", text });
+    paragraph = [];
+  }
+
+  function flushSection() {
+    flushParagraph();
+    if (section.blocks.length) sections.push(section);
+  }
+
+  const lines = String(content || "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+(#{1,4})\s+/g, "\n$1 ")
+    .replace(/\s+(\*\*[^*]{2,80}\*\*:?)/g, "\n$1 ")
+    .replace(/\s+(\d+[.)])\s+(?=[A-ZÀ-ÖØ-Þ])/g, "\n$1 ")
+    .replace(/\s+-\s+(?=[A-ZÀ-ÖØ-Þ])/g, "\n- ")
+    .split("\n");
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushParagraph();
+      continue;
+    }
+
+    const markdownHeading = line.match(/^#{1,4}\s+(.+)$/);
+    const boldHeading = line.match(/^\*\*([^*]{2,80})\*\*:?\s*(.*)$/);
+    if (markdownHeading || boldHeading) {
+      const heading = cleanAnswerText(
+        markdownHeading ? markdownHeading[1] : boldHeading[1],
+      );
+      const remainder = boldHeading ? cleanAnswerText(boldHeading[2]) : "";
+      flushSection();
+      section = { heading: heading || "Advies", blocks: [] };
+      if (remainder)
+        section.blocks.push({ type: "paragraph", text: remainder });
+      continue;
+    }
+
+    const ordered = line.match(/^\d+[.)]\s+(.+)$/);
+    const bullet = line.match(/^[-*•]\s+(.+)$/);
+    if (ordered || bullet) {
+      flushParagraph();
+      const type = ordered ? "ordered" : "unordered";
+      const text = cleanAnswerText((ordered || bullet)[1]);
+      const previous = section.blocks[section.blocks.length - 1];
+      if (previous?.type === type) previous.items.push(text);
+      else section.blocks.push({ type, items: [text] });
+      continue;
+    }
+
+    paragraph.push(line);
+  }
+
+  flushSection();
+  return sections.length
+    ? sections
+    : [
+        {
+          heading: "Kort antwoord",
+          blocks: [{ type: "paragraph", text: cleanAnswerText(content) }],
+        },
+      ];
+}
+
+function answerTone(heading) {
+  const value = heading.toLowerCase();
+  if (/nood|brand|zink|direct stoppen/.test(value)) return "critical";
+  if (/veilig|waarschuw|eerst doen|niet doen|let op/.test(value))
+    return "warning";
+  if (/kort antwoord|samenvatting|advies/.test(value)) return "info";
+  return "neutral";
+}
+
+function AnswerBlocks({ blocks }) {
+  return (
+    <s-stack gap="small-300">
+      {blocks.map((block, index) => {
+        if (block.type === "ordered") {
+          return (
+            <s-ordered-list key={`ordered-${index}`}>
+              {block.items.map((item, itemIndex) => (
+                <s-list-item key={`${item}-${itemIndex}`}>{item}</s-list-item>
+              ))}
+            </s-ordered-list>
+          );
+        }
+        if (block.type === "unordered") {
+          return (
+            <s-unordered-list key={`unordered-${index}`}>
+              {block.items.map((item, itemIndex) => (
+                <s-list-item key={`${item}-${itemIndex}`}>{item}</s-list-item>
+              ))}
+            </s-unordered-list>
+          );
+        }
+        return (
+          <s-paragraph key={`paragraph-${index}`}>{block.text}</s-paragraph>
+        );
+      })}
+    </s-stack>
+  );
+}
+
+function AssistantAnswer({ content }) {
+  const sections = parseAssistantAnswer(content);
+  return (
+    <s-stack gap="base">
+      {sections.map((answerSection, index) => {
+        const tone = answerTone(answerSection.heading);
+        if (index === 0 || tone === "warning" || tone === "critical") {
+          return (
+            <s-banner
+              key={`${answerSection.heading}-${index}`}
+              heading={answerSection.heading}
+              tone={tone}
+            >
+              <AnswerBlocks blocks={answerSection.blocks} />
+            </s-banner>
+          );
+        }
+        return (
+          <s-section
+            key={`${answerSection.heading}-${index}`}
+            heading={answerSection.heading}
+          >
+            <AnswerBlocks blocks={answerSection.blocks} />
+          </s-section>
+        );
+      })}
+    </s-stack>
+  );
+}
+
 export function CaptainAi({ profileId, profile }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -224,22 +378,34 @@ export function CaptainAi({ profileId, profile }) {
       {open && (
         <s-box padding="base" border="base" borderRadius="base">
           <s-stack gap="base">
-            <s-image
-              src="https://bootprofielen.onrender.com/captain-ai.png"
-              alt="Captain AI van WetterWinkel"
-              aspectRatio="1/1"
-            />
-            <s-heading>Captain AI voor {boatName}</s-heading>
-            <s-text>
-              Captain AI gebruikt uw bootprofiel en Digitaal serviceboek, kan
-              actuele technische bronnen raadplegen en adviseert uitsluitend
-              producten uit het WetterWinkel-assortiment.
-            </s-text>
-            <s-text>
+            <s-grid
+              gridTemplateColumns="96px minmax(0, 1fr)"
+              gap="base"
+              alignItems="center"
+            >
+              <s-image
+                src="https://bootprofielen.onrender.com/captain-ai.png"
+                alt="Captain AI van WetterWinkel"
+                aspectRatio="1/1"
+              />
+              <s-stack gap="small-300">
+                <s-badge tone="info">Persoonlijk bootadvies</s-badge>
+                <s-heading>Captain AI voor {boatName}</s-heading>
+                <s-text>
+                  Antwoorden op vragen over techniek, onderhoud en uitrusting,
+                  afgestemd op uw boot en Digitaal serviceboek.
+                </s-text>
+              </s-stack>
+            </s-grid>
+            <s-banner
+              heading="Captain AI veilig gebruiken"
+              tone="warning"
+              collapsible
+            >
               Adviezen zijn ondersteunend. Controleer veiligheidskritische
-              werkzaamheden altijd met de handleiding en zo nodig een
+              werkzaamheden altijd met de juiste handleiding en zo nodig een
               vakbedrijf.
-            </s-text>
+            </s-banner>
             <s-text>
               Uw gesprekken worden veilig bij dit klantaccount en bootprofiel
               opgeslagen. U kunt een gesprek hieronder verwijderen.
@@ -298,66 +464,84 @@ export function CaptainAi({ profileId, profile }) {
                 borderRadius="base"
               >
                 <s-stack gap="small-300">
-                  <s-heading>
-                    {message.role === "USER" ? "U" : "Captain AI"}
-                  </s-heading>
-                  <s-paragraph>{message.content}</s-paragraph>
+                  <s-stack direction="inline" gap="small-300">
+                    <s-heading>
+                      {message.role === "USER" ? "Uw vraag" : "Captain AI"}
+                    </s-heading>
+                    {message.role === "ASSISTANT" && (
+                      <s-badge tone="info">Afgestemd op uw boot</s-badge>
+                    )}
+                  </s-stack>
+                  {message.role === "ASSISTANT" ? (
+                    <AssistantAnswer content={message.content} />
+                  ) : (
+                    <s-paragraph>{message.content}</s-paragraph>
+                  )}
 
                   {(message.sources || []).length > 0 && (
-                    <s-stack gap="small-300">
-                      <s-text>Gebruikte bronnen</s-text>
-                      {message.sources.map((source, index) =>
-                        source.url ? (
-                          <s-link
-                            key={`${source.url}-${index}`}
-                            href={source.url}
-                            target="_blank"
-                          >
-                            {source.title}
-                          </s-link>
-                        ) : (
-                          <s-text key={`${source.title}-${index}`}>
-                            Handleiding: {source.title}
-                          </s-text>
-                        ),
-                      )}
-                    </s-stack>
+                    <s-banner
+                      heading={`Technische bronnen (${message.sources.length})`}
+                      tone="neutral"
+                      collapsible
+                    >
+                      <s-stack gap="small-300">
+                        {message.sources.map((source, index) =>
+                          source.url ? (
+                            <s-link
+                              key={`${source.url}-${index}`}
+                              href={source.url}
+                              target="_blank"
+                            >
+                              {source.title}
+                            </s-link>
+                          ) : (
+                            <s-text key={`${source.title}-${index}`}>
+                              Handleiding: {source.title}
+                            </s-text>
+                          ),
+                        )}
+                      </s-stack>
+                    </s-banner>
                   )}
 
                   {(message.products || []).length > 0 && (
-                    <s-stack gap="small-300">
-                      <s-text>Passend gevonden bij WetterWinkel</s-text>
-                      {message.products.map((product) => (
-                        <s-box
-                          key={product.id}
-                          padding="base"
-                          border="base"
-                          borderRadius="base"
-                        >
-                          <s-stack gap="small-300">
-                            {product.imageUrl && (
-                              <s-image
-                                src={product.imageUrl}
-                                alt={product.imageAlt || product.title}
-                                aspectRatio="1/1"
-                              />
-                            )}
-                            <s-heading>{product.title}</s-heading>
-                            {productPrice(product) && (
-                              <s-text>Vanaf {productPrice(product)}</s-text>
-                            )}
-                            <s-text>
-                              {product.available
-                                ? "Beschikbaar"
-                                : "Beschikbaarheid controleren"}
-                            </s-text>
-                            <s-button href={product.url} target="_blank">
-                              Bekijk bij WetterWinkel
-                            </s-button>
-                          </s-stack>
-                        </s-box>
-                      ))}
-                    </s-stack>
+                    <s-section heading="Passend bij WetterWinkel">
+                      <s-grid
+                        gridTemplateColumns="repeat(auto-fit, minmax(180px, 1fr))"
+                        gap="small-300"
+                      >
+                        {message.products.map((product) => (
+                          <s-box
+                            key={product.id}
+                            padding="base"
+                            border="base"
+                            borderRadius="base"
+                          >
+                            <s-stack gap="small-300">
+                              {product.imageUrl && (
+                                <s-image
+                                  src={product.imageUrl}
+                                  alt={product.imageAlt || product.title}
+                                  aspectRatio="1/1"
+                                />
+                              )}
+                              <s-heading>{product.title}</s-heading>
+                              {productPrice(product) && (
+                                <s-text>Vanaf {productPrice(product)}</s-text>
+                              )}
+                              <s-text>
+                                {product.available
+                                  ? "Beschikbaar"
+                                  : "Beschikbaarheid controleren"}
+                              </s-text>
+                              <s-button href={product.url} target="_blank">
+                                Bekijk bij WetterWinkel
+                              </s-button>
+                            </s-stack>
+                          </s-box>
+                        ))}
+                      </s-grid>
+                    </s-section>
                   )}
 
                   {message.role === "ASSISTANT" && (

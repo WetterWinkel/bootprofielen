@@ -46,11 +46,13 @@ const PRODUCT_SEARCH_GROUPS: Array<{
     queries: ["motorolie", "dieselmotorolie", "SAE 30", "marine engine oil"],
   },
   {
-    pattern: /\b(fender|fenders|stootwil|stootwillen|stootkussen|stootkussens)\b/i,
+    pattern:
+      /\b(fender|fenders|stootwil|stootwillen|stootkussen|stootkussens)\b/i,
     queries: ["fender", "stootwil", "stootkussen"],
   },
   {
-    pattern: /\b(landvast|landvasten|aanmeerlijn|aanmeerlijnen|meertouw|meertouwen|touw|touwen)\b/i,
+    pattern:
+      /\b(landvast|landvasten|aanmeerlijn|aanmeerlijnen|meertouw|meertouwen|touw|touwen)\b/i,
     queries: ["landvast", "aanmeerlijn", "meertouw"],
   },
   {
@@ -66,7 +68,8 @@ const PRODUCT_SEARCH_GROUPS: Array<{
     queries: ["anode", "zinkanode", "aluminiumanode"],
   },
   {
-    pattern: /\b(oliefilter|brandstoffilter|dieselfilter|waterafscheider|filter|filters)\b/i,
+    pattern:
+      /\b(oliefilter|brandstoffilter|dieselfilter|waterafscheider|filter|filters)\b/i,
     queries: ["oliefilter", "brandstoffilter", "waterafscheider"],
   },
   {
@@ -74,7 +77,8 @@ const PRODUCT_SEARCH_GROUPS: Array<{
     queries: ["koelvloeistof", "antivries boot"],
   },
   {
-    pattern: /\b(accu|accus|accu's|acculader|druppellader|boordaccu|startaccu)\b/i,
+    pattern:
+      /\b(accu|accus|accu's|acculader|druppellader|boordaccu|startaccu)\b/i,
     queries: ["boot accu", "acculader", "druppellader"],
   },
   {
@@ -90,16 +94,16 @@ const PRODUCT_SEARCH_GROUPS: Array<{
     queries: ["bilgepomp", "lenswaterpomp", "boot pomp"],
   },
   {
-    pattern: /\b(antifouling|rompreiniger|bootreiniger|teakreiniger|poetsmiddel)\b/i,
+    pattern:
+      /\b(antifouling|rompreiniger|bootreiniger|teakreiniger|poetsmiddel)\b/i,
     queries: ["antifouling", "bootreiniger", "poetsmiddel boot"],
   },
 ];
 
 function latestCustomerQuestion(input: CaptainInput) {
   return (
-    [...input.messages]
-      .reverse()
-      .find((message) => message.role === "USER")?.content || ""
+    [...input.messages].reverse().find((message) => message.role === "USER")
+      ?.content || ""
   );
 }
 
@@ -246,6 +250,12 @@ WERKWIJZE EN BRONNEN
 - Verzin nooit onderhoudsintervallen, belastingwaarden, kabeldiktes, zekeringen, vloeistoffen, onderdeelnummers of veiligheidsclaims.
 - Bij gas, 230V, accubanken, brandstof, hijsen, rompdoorvoeren en andere veiligheidskritische werkzaamheden: geef veilige algemene informatie en adviseer controle door een vakbedrijf wanneer gegevens of expertise ontbreken.
 
+ALLE BOOTSYSTEMEN — DEZELFDE KWALITEIT
+- Behandel vragen over de volledige boot met dezelfde zorg: onder andere touwen en landvasten, fenders, lieren, ankers, dekbeslag en dekdoorvoeren, schroefas en afdichtingen, stuurwerk, pompen en leidingwerk, koelkasten, verwarming, ventilatie, sanitair, elektra, accu's, laders, omvormers en veiligheidsmiddelen.
+- Combineer altijd relevante gegevens uit het bootprofiel met de actuele vraag. Controleer bij systeem- of productadvies merk, type, maatvoering, boordspanning, materiaal, montagewijze en gebruiksomstandigheden voor zover die de uitkomst beïnvloeden.
+- Geef bij een storing eerst aan wat de klant veilig direct kan controleren, daarna de meest waarschijnlijke oorzaken en pas daarna herstel- of productadvies. Maak duidelijk wanneer varen, inschakelen of verder demonteren onverstandig is.
+- Een exact merk/type is niet altijd nodig voor een bruikbaar eerste antwoord. Geef dan een veilig voorlopig advies met één concrete controlevoorwaarde, zodat een klant niet onnodig vastloopt.
+
 MOTOR EN DIGITAAL SERVICEBOEK — BIJ IEDERE MOTOR
 - Behandel iedere motorvraag zoals een persoonlijk digitaal motorserviceboek, ongeacht merk of type. Combineer altijd het bootprofiel, de motorvelden en relevante regels uit het Digitaal serviceboek.
 - Benoem het gebruikte motormerk en exacte type. Controleer bij technisch advies waar mogelijk een officiële fabrikant- of werkplaatshandleiding voor precies die motorvariant; gebruik een handleiding van een vergelijkbare motor nooit stilzwijgend alsof die exact past.
@@ -280,7 +290,16 @@ ${compact(
 Als deze lijst passende producten bevat, gebruik select_wetterwinkel_products met de exacte ID's. Als niets exact past, zoek zelf nog één keer met een korter synoniem; verzin geen match.
 
 ANTWOORDSTIJL
-Antwoord helder, praktisch en niet langer dan nodig. Gebruik metrische eenheden. Sluit waar nuttig af met één concrete vervolgvraag. Zeg niet dat je een menselijke monteur of gecertificeerd expert bent.`;
+Schrijf voor een moderne mobiele interface, niet als doorlopend rapport.
+- Begin direct met het antwoord; geen lange inleiding en geen herhaling van de vraag.
+- Gebruik maximaal vijf korte secties en bij voorkeur maximaal 450 woorden.
+- Gebruik precies passende koppen in deze vorm: "## Kort antwoord", waar nodig "## Eerst veilig", daarna bijvoorbeeld "## Waarschijnlijke oorzaak", "## Nu controleren", "## Oplossing" en tot slot "## Nog één vraag".
+- Zet handelingen in een genummerde lijst en korte controlepunten in bullets. Houd alinea's bij voorkeur onder drie zinnen.
+- Zet bronlinks en URL's niet in de antwoordtekst. De interface toont gebruikte bronnen afzonderlijk en inklapbaar.
+- Gebruik geen Markdown-tabellen. Gebruik vet alleen zeer spaarzaam; de interface bepaalt de visuele nadruk.
+- Noem WetterWinkel-producten niet als tekstuele winkellijst. Selecteer ze met select_wetterwinkel_products; de interface toont dan klikbare productkaarten.
+- Gebruik metrische eenheden. Sluit alleen wanneer nuttig af met één concrete vervolgvraag.
+Zeg niet dat je een menselijke monteur of gecertificeerd expert bent.`;
 }
 
 function responseSources(response: any): CaptainSource[] {
