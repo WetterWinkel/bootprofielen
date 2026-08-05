@@ -32,7 +32,12 @@ async function context(request: Request) {
   const destination = String((sessionToken as any).dest ?? "");
   if (!destination) throw new Error("Shop ontbreekt in het sessietoken");
 
-  const {admin} = await unauthenticated.admin(new URL(destination).hostname);
+  // Customer-account tokens can contain either a full URL or only the
+  // myshopify.com hostname in `dest`.
+  const shopDomain = new URL(
+    destination.includes("://") ? destination : `https://${destination}`,
+  ).hostname;
+  const {admin} = await unauthenticated.admin(shopDomain);
   return {
     admin,
     cors,
