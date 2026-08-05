@@ -418,8 +418,13 @@ function Extension() {
         </FormContext.Provider>
       )}
 
+      <s-button disabled>▶ Serviceboek komt later</s-button>
+      <s-button disabled>▶ Captain AI komt later</s-button>
+
       <s-button onClick={() => setDossierOpen(!dossierOpen)}>
-        {dossierOpen ? '▼ Export en overdracht sluiten' : '▶ Export en boot overdragen'}
+        {dossierOpen
+          ? '▼ Bootdossier exporteren / Bootprofiel overdragen sluiten'
+          : '▶ Bootdossier exporteren / Bootprofiel overdragen'}
       </s-button>
 
       {dossierOpen && (
@@ -459,8 +464,6 @@ function Extension() {
         </s-stack>
       )}
 
-      <s-button disabled>▶ Serviceboek komt later</s-button>
-      <s-button disabled>▶ Captain AI komt later</s-button>
     </s-stack>
   );
 }
