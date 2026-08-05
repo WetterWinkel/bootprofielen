@@ -124,15 +124,6 @@ function parseStructuredAnswer(content) {
   }
 }
 
-function answerTone(heading) {
-  const value = heading.toLowerCase();
-  if (/nood|brand|zink|direct stoppen/.test(value)) return "critical";
-  if (/veilig|waarschuw|eerst doen|niet doen|let op/.test(value))
-    return "warning";
-  if (/kort antwoord|samenvatting|advies/.test(value)) return "info";
-  return "neutral";
-}
-
 function AnswerBlocks({ blocks }) {
   return (
     <s-stack gap="small-300">
@@ -163,56 +154,74 @@ function AnswerBlocks({ blocks }) {
   );
 }
 
+function AnswerSection({ heading, blocks, badge, badgeTone = "neutral" }) {
+  return (
+    <s-stack gap="small-300">
+      <s-stack direction="inline" gap="small-300" alignItems="center">
+        <s-heading>{heading}</s-heading>
+        {badge && <s-badge tone={badgeTone}>{badge}</s-badge>}
+      </s-stack>
+      <AnswerBlocks blocks={blocks} />
+    </s-stack>
+  );
+}
+
 function AssistantAnswer({ content }) {
   const structured = parseStructuredAnswer(content);
   if (structured) {
-    const summaryTone =
-      structured.urgency === "stop"
-        ? "critical"
-        : structured.urgency === "attention"
-          ? "warning"
-          : "info";
     const listBlocks = (items, type = "unordered") => [{ type, items }];
+    const urgencyBadge =
+      structured.urgency === "stop"
+        ? "Direct stoppen"
+        : structured.urgency === "attention"
+          ? "Let op"
+          : "";
+    const urgencyTone = structured.urgency === "stop" ? "critical" : "warning";
 
     return (
       <s-stack gap="base">
-        <s-banner heading="Kort antwoord" tone={summaryTone}>
-          <s-paragraph>{structured.summary}</s-paragraph>
-        </s-banner>
+        <AnswerSection
+          heading="Kort antwoord"
+          blocks={[{ type: "paragraph", text: structured.summary }]}
+          badge={urgencyBadge}
+          badgeTone={urgencyTone}
+        />
 
         {structured.safety.length > 0 && (
-          <s-banner
+          <AnswerSection
             heading={
               structured.urgency === "stop" ? "Stop eerst" : "Eerst veilig"
             }
-            tone={structured.urgency === "stop" ? "critical" : "warning"}
-          >
-            <AnswerBlocks blocks={listBlocks(structured.safety)} />
-          </s-banner>
+            blocks={listBlocks(structured.safety)}
+          />
         )}
 
         {structured.causes.length > 0 && (
-          <s-section heading="Waarschijnlijke oorzaken">
-            <AnswerBlocks blocks={listBlocks(structured.causes)} />
-          </s-section>
+          <AnswerSection
+            heading="Waarschijnlijke oorzaken"
+            blocks={listBlocks(structured.causes)}
+          />
         )}
 
         {structured.checks.length > 0 && (
-          <s-section heading="Nu controleren">
-            <AnswerBlocks blocks={listBlocks(structured.checks, "ordered")} />
-          </s-section>
+          <AnswerSection
+            heading="Nu controleren"
+            blocks={listBlocks(structured.checks, "ordered")}
+          />
         )}
 
         {structured.solution.length > 0 && (
-          <s-section heading="Oplossing">
-            <AnswerBlocks blocks={listBlocks(structured.solution, "ordered")} />
-          </s-section>
+          <AnswerSection
+            heading="Oplossing"
+            blocks={listBlocks(structured.solution, "ordered")}
+          />
         )}
 
         {structured.followUp && (
-          <s-banner heading="Nog één vraag" tone="neutral">
-            <s-paragraph>{structured.followUp}</s-paragraph>
-          </s-banner>
+          <AnswerSection
+            heading="Nog één vraag"
+            blocks={[{ type: "paragraph", text: structured.followUp }]}
+          />
         )}
       </s-stack>
     );
@@ -221,28 +230,13 @@ function AssistantAnswer({ content }) {
   const sections = parseAssistantAnswer(content);
   return (
     <s-stack gap="base">
-      {sections.map((answerSection, index) => {
-        const tone = answerTone(answerSection.heading);
-        if (index === 0 || tone === "warning" || tone === "critical") {
-          return (
-            <s-banner
-              key={`${answerSection.heading}-${index}`}
-              heading={answerSection.heading}
-              tone={tone}
-            >
-              <AnswerBlocks blocks={answerSection.blocks} />
-            </s-banner>
-          );
-        }
-        return (
-          <s-section
-            key={`${answerSection.heading}-${index}`}
-            heading={answerSection.heading}
-          >
-            <AnswerBlocks blocks={answerSection.blocks} />
-          </s-section>
-        );
-      })}
+      {sections.map((answerSection, index) => (
+        <AnswerSection
+          key={`${answerSection.heading}-${index}`}
+          heading={answerSection.heading}
+          blocks={answerSection.blocks}
+        />
+      ))}
     </s-stack>
   );
 }
@@ -478,14 +472,12 @@ export function CaptainAi({ profileId, profile }) {
                 </s-text>
               </s-stack>
             </s-grid>
-            <s-banner
-              heading="Captain AI veilig gebruiken"
-              tone="warning"
-              collapsible
-            >
-              Adviezen zijn ondersteunend. Controleer veiligheidskritische
-              werkzaamheden altijd met de juiste handleiding en zo nodig een
-              vakbedrijf.
+            <s-banner heading="Captain AI is een hulpmiddel" tone="warning">
+              Captain AI kan onvolledige of onjuiste informatie geven. Het
+              advies vervangt geen fabrikantshandleiding, inspectie of deskundig
+              oordeel. Controleer veiligheidskritische werkzaamheden altijd met
+              de juiste handleiding en zo nodig een vakbedrijf. Aan antwoorden
+              van Captain AI kunnen geen aanspraken of rechten worden ontleend.
             </s-banner>
             <s-text>
               Uw gesprekken worden veilig bij dit klantaccount en bootprofiel
@@ -530,7 +522,7 @@ export function CaptainAi({ profileId, profile }) {
             )}
 
             <s-checkbox
-              label="Mijn feedback mag geanonimiseerd worden gebruikt om Captain AI gecontroleerd te verbeteren"
+              label="Ik geef toestemming om mijn feedback en bijbehorende gespreksfragmenten gepseudonimiseerd te gebruiken om Captain AI gecontroleerd te verbeteren"
               checked={consent}
               onChange={(event) => setConsent(event.currentTarget.checked)}
             />
