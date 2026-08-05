@@ -2,6 +2,7 @@ import '@shopify/ui-extensions/preact';
 import {createContext, render} from 'preact';
 import {useContext, useEffect, useState} from 'preact/hooks';
 import {BoatMarketplace} from './BoatMarketplace.jsx';
+import {CaptainAi} from './CaptainAi.jsx';
 import {DigitalServiceBook} from './DigitalServiceBook.jsx';
 
 const API_URL =
@@ -437,7 +438,11 @@ function Extension() {
         profile={activeProfile}
         fileBase64={fileBase64}
       />
-      <s-button disabled>▶ Captain AI komt later</s-button>
+      <CaptainAi
+        key={`captain-${activeId || 'geen-boot'}`}
+        profileId={activeId}
+        profile={activeProfile}
+      />
 
       <s-button onClick={() => setDossierOpen(!dossierOpen)}>
         {dossierOpen

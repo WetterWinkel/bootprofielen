@@ -23,9 +23,19 @@ services:
       - key: RESEND_API_KEY
         sync: false
       - key: MARKETPLACE_EMAIL_FROM
-        value: WetterWinkel Bootmarkt <bootmarkt@wetterwinkel.nl>
+        value: WetterWinkel Bootmarkt <info@wetterwinkel.nl>
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5.6-terra
+      - key: OPENAI_VECTOR_STORE_ID
+        sync: false
+      - key: CAPTAIN_AI_DAILY_LIMIT
+        value: 30
+      - key: CAPTAIN_AI_PUBLIC_DAILY_LIMIT
+        value: 150
       - key: SCOPES
-        value: read_customers,write_customers,read_metaobjects,write_metaobjects,read_metaobject_definitions,write_metaobject_definitions,read_files,write_files,read_orders,write_draft_orders,write_app_proxy
+        value: read_customers,write_customers,read_products,read_metaobjects,write_metaobjects,read_metaobject_definitions,write_metaobject_definitions,read_files,write_files,read_orders,write_draft_orders,write_app_proxy
 
 databases:
   - name: bootprofielen-db

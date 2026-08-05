@@ -1,0 +1,83 @@
+<div
+  class="ww-captain"
+  data-ww-captain
+  data-api="/apps/bootmarkt/captain-ai"
+  data-account-url="/account/profile"
+  data-products-url="/collections/all"
+  data-contact-url="/pages/contact"
+  data-image="https://bootprofielen.onrender.com/captain-ai.png"
+>
+  <button class="ww-captain__launcher" type="button" data-captain-open aria-expanded="false">
+    <img src="https://bootprofielen.onrender.com/captain-ai.png" alt="" width="52" height="52" loading="lazy">
+    <span>{{ block.settings.knoptekst | escape }}</span>
+  </button>
+
+  <section class="ww-captain__panel" data-captain-panel hidden aria-label="Captain AI">
+    <header class="ww-captain__header">
+      <img src="https://bootprofielen.onrender.com/captain-ai.png" alt="Captain AI van WetterWinkel" width="64" height="64">
+      <div>
+        <strong>Captain AI</strong>
+        <span>Persoonlijk advies voor uw boot</span>
+      </div>
+      <button type="button" class="ww-captain__close" data-captain-close aria-label="Captain AI sluiten">×</button>
+    </header>
+
+    <div class="ww-captain__body">
+      <p class="ww-captain__intro">
+        Stel zonder account drie gratis vragen. Noem uw boot gewoon in de vraag. Captain AI controleert
+        technische informatie buiten WetterWinkel, maar adviseert uitsluitend producten uit onze eigen webshop.
+      </p>
+
+      <details class="ww-captain__boat">
+        <summary>Optioneel: extra bootgegevens voor preciezer advies</summary>
+        <div class="ww-captain__fields">
+          <label>Merk<input type="text" data-boat-brand maxlength="100" placeholder="Bijv. Antaris"></label>
+          <label>Model<input type="text" data-boat-model maxlength="100" placeholder="Bijv. Fifty5"></label>
+          <label>Lengte in meter<input type="text" inputmode="decimal" data-boat-length maxlength="20" placeholder="Bijv. 8,0"></label>
+          <label>Bouwjaar<input type="text" inputmode="numeric" data-boat-year maxlength="12" placeholder="Optioneel"></label>
+          <label class="ww-captain__wide">Extra informatie<input type="text" data-boat-details maxlength="500" placeholder="Bijv. gewicht, ligplaats of gebruik"></label>
+        </div>
+      </details>
+
+      <div class="ww-captain__messages" data-captain-messages aria-live="polite"></div>
+
+      <form class="ww-captain__form" data-captain-form>
+        <label for="ww-captain-question-{{ block.id }}">Uw vraag</label>
+        <textarea id="ww-captain-question-{{ block.id }}" data-captain-question rows="3" maxlength="1500" placeholder="Mijn Antaris Fifty5 is 8 meter. Welke fenders en landvasten passen daarbij?"></textarea>
+        <label class="ww-captain__consent">
+          <input type="checkbox" data-captain-consent>
+          Mijn vraag mag geanonimiseerd worden gebruikt om Captain AI gecontroleerd te verbeteren.
+        </label>
+        <button type="submit" class="ww-captain__send" data-captain-send>Vraag stellen</button>
+        <p class="ww-captain__remaining" data-captain-remaining>3 openbare vragen beschikbaar</p>
+      </form>
+
+      <div class="ww-captain__gate" data-captain-gate hidden>
+        <strong>Nauwkeuriger advies met uw eigen bootprofiel</strong>
+        <p>Uw drie openbare vragen zijn gebruikt. Een gratis bootprofiel voorkomt dat u maten en motorgegevens steeds opnieuw moet invullen.</p>
+        <a href="/account/profile" class="ww-captain__primary">Gratis bootprofiel maken</a>
+        <div class="ww-captain__alternatives">
+          <a href="/collections/all">Zonder profiel producten bekijken</a>
+          <a href="/pages/contact">Persoonlijk contact</a>
+        </div>
+      </div>
+
+      <p class="ww-captain__privacy">
+        Advies is ondersteunend; controleer veiligheidskritische werkzaamheden met de handleiding of een vakbedrijf.
+        <a href="/policies/privacy-policy">Privacy</a>
+      </p>
+    </div>
+  </section>
+</div>
+
+{% schema %}
+{
+  "name": "Captain AI",
+  "target": "body",
+  "stylesheet": "captain-ai.css",
+  "javascript": "captain-ai.js",
+  "settings": [
+    {"type": "text", "id": "knoptekst", "label": "Knoptekst", "default": "Vraag Captain AI"}
+  ]
+}
+{% endschema %}
