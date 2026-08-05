@@ -69,6 +69,27 @@ function fieldChecked(event) {
   return Boolean(event.currentTarget?.checked);
 }
 
+function validateForm(form) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(form.serviceDate || ''))) {
+    return 'Kies een geldige datum.';
+  }
+  if (!String(form.category || '').trim()) return 'Kies een categorie.';
+  if (!String(form.description || '').trim()) {
+    return 'Beschrijf de uitgevoerde of geplande werkzaamheden.';
+  }
+  if (form.status === 'COMPLETED' && !String(form.performedBy || '').trim()) {
+    return 'Vul in wie de werkzaamheden heeft uitgevoerd.';
+  }
+  return '';
+}
+
+function sortEntries(items) {
+  return [...items].sort((left, right) =>
+    right.serviceDate.localeCompare(left.serviceDate) ||
+    right.createdAt.localeCompare(left.createdAt),
+  );
+}
+
 export function DigitalServiceBook({api, profileId, profile, fileBase64}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -177,8 +198,14 @@ export function DigitalServiceBook({api, profileId, profile, fileBase64}) {
 
   async function saveEntry() {
     if (!profileId || saving) return;
+    const validationError = validateForm(form);
+    if (validationError) {
+      setMessage(validationError);
+      return;
+    }
     setSaving(true);
     setMessage('');
+    const selectedAttachment = attachment;
     try {
       const intent = editingId ? 'service_update' : 'service_create';
       const json = await api('POST', {
@@ -190,35 +217,58 @@ export function DigitalServiceBook({api, profileId, profile, fileBase64}) {
       let saved = json.entry;
       let savedMessage = json.message;
 
-      if (attachment) {
-        const uploaded = await api('POST', {
-          intent: 'service_upload_attachment',
-          profileId,
-          entryId: saved.id,
-          attachment: {
-            filename: attachment.name,
-            mimeType: attachment.type,
-            data: await fileBase64(attachment),
-          },
+      // Prefer the list that the backend has just read back from Prisma. This
+      // is stronger than an optimistic local update: the item shown below is
+      // demonstrably persisted and is the same source used by the PDF.
+      if (Array.isArray(json.entries)) {
+        setEntries(sortEntries(json.entries));
+      } else {
+        setEntries((current) => {
+          const exists = current.some((item) => item.id === saved.id);
+          return sortEntries(exists
+            ? current.map((item) => item.id === saved.id ? saved : item)
+            : [saved, ...current]);
         });
-        saved = uploaded.entry;
-        savedMessage = uploaded.message;
       }
 
-      setEntries((current) => {
-        const exists = current.some((item) => item.id === saved.id);
-        const next = exists
-          ? current.map((item) => item.id === saved.id ? saved : item)
-          : [saved, ...current];
-        return next.sort((left, right) =>
-          right.serviceDate.localeCompare(left.serviceDate) ||
-          right.createdAt.localeCompare(left.createdAt),
-        );
-      });
+      setEditingId('');
+      setFormOpen(false);
+      setForm(emptyForm(profile));
+      setAttachment(null);
+      setAttachmentError('');
+      setAttachmentKey((value) => value + 1);
       setMessage(savedMessage || 'Onderhoudsregel opgeslagen.');
-      cancelEdit();
+
+      if (selectedAttachment) {
+        try {
+          const uploaded = await api('POST', {
+            intent: 'service_upload_attachment',
+            profileId,
+            entryId: saved.id,
+            attachment: {
+              filename: selectedAttachment.name,
+              mimeType: selectedAttachment.type,
+              data: await fileBase64(selectedAttachment),
+            },
+          });
+          saved = uploaded.entry;
+          savedMessage = uploaded.message;
+          setEntries(Array.isArray(uploaded.entries)
+            ? sortEntries(uploaded.entries)
+            : (current) => sortEntries(current.map((item) =>
+                item.id === saved.id ? saved : item,
+              )));
+          setMessage(savedMessage || 'Onderhoudsregel en bewijsstuk opgeslagen.');
+        } catch (uploadError) {
+          // The maintenance row is already safely stored. A file problem must
+          // never make that successful save look like it failed.
+          setMessage(
+            `De onderhoudsregel is opgeslagen en staat hieronder. Alleen het bewijsstuk is niet toegevoegd: ${uploadError.message}`,
+          );
+        }
+      }
     } catch (error) {
-      setMessage(error.message);
+      setMessage(`Opslaan mislukt: ${error.message}`);
     } finally {
       setSaving(false);
     }
@@ -283,6 +333,7 @@ export function DigitalServiceBook({api, profileId, profile, fileBase64}) {
           {profileId && (
             <>
               <s-heading>Digitaal serviceboek · {boatName}</s-heading>
+              <s-text>Opgeslagen regels voor deze boot: {entries.length}</s-text>
               <s-text>
                 Leg onderhoud, reparaties, onderdelen en volgende beurten vast. Iedere regel is privé en blijft aan deze boot gekoppeld, ook bij een veilige bootoverdracht.
               </s-text>
@@ -297,6 +348,7 @@ export function DigitalServiceBook({api, profileId, profile, fileBase64}) {
               {formOpen && (
                 <s-stack gap="base">
                   <s-heading>{editingId ? 'Onderhoudsregel wijzigen' : 'Nieuwe onderhoudsregel'}</s-heading>
+                  {message && <s-text>{message}</s-text>}
                   <s-select
                     label="Status *"
                     value={form.status}
@@ -305,7 +357,7 @@ export function DigitalServiceBook({api, profileId, profile, fileBase64}) {
                     <s-option value="COMPLETED">Uitgevoerd</s-option>
                     <s-option value="PLANNED">Gepland</s-option>
                   </s-select>
-                  <ServiceField label="Datum (jjjj-mm-dd) *" name="serviceDate" form={form} update={update} />
+                  <ServiceDateField label="Datum *" name="serviceDate" form={form} update={update} />
                   <s-select
                     label="Categorie *"
                     value={form.category}
@@ -356,8 +408,8 @@ export function DigitalServiceBook({api, profileId, profile, fileBase64}) {
                     form={form}
                     update={update}
                   />
-                  <ServiceField
-                    label="Volgende beurt op datum (jjjj-mm-dd)"
+                  <ServiceDateField
+                    label="Volgende beurt op datum"
                     name="nextServiceDate"
                     form={form}
                     update={update}
@@ -388,6 +440,8 @@ export function DigitalServiceBook({api, profileId, profile, fileBase64}) {
               {!loading && entries.length === 0 && (
                 <s-text>Nog geen onderhoudsregels voor deze boot.</s-text>
               )}
+
+              {!formOpen && message && <s-text>{message}</s-text>}
 
               {entries.map((entry) => (
                 <s-stack key={entry.id} gap="small-300">
@@ -423,7 +477,6 @@ export function DigitalServiceBook({api, profileId, profile, fileBase64}) {
             </>
           )}
 
-          {message && <s-text>{message}</s-text>}
         </s-stack>
       )}
     </s-stack>
@@ -433,6 +486,17 @@ export function DigitalServiceBook({api, profileId, profile, fileBase64}) {
 function ServiceField({label, name, form, update}) {
   return (
     <s-text-field
+      label={label}
+      value={String(form[name] ?? '')}
+      onInput={(event) => update(name, fieldValue(event))}
+      onChange={(event) => update(name, fieldValue(event))}
+    />
+  );
+}
+
+function ServiceDateField({label, name, form, update}) {
+  return (
+    <s-date-field
       label={label}
       value={String(form[name] ?? '')}
       onInput={(event) => update(name, fieldValue(event))}

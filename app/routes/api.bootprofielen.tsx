@@ -669,10 +669,20 @@ export async function action({request}: ActionFunctionArgs) {
               ...data,
             },
           });
+          // Read the list back from the database before confirming the save.
+          // The customer-account UI can therefore only show "opgeslagen" when
+          // the new row is actually persisted and immediately retrievable.
+          const entries = await serviceEntries(
+            admin,
+            shopDomain,
+            customerId,
+            profileId,
+          );
           return cors(response({
             success: true,
             message: "Onderhoudsregel opgeslagen in uw Digitaal serviceboek.",
             entry: serializeServiceBookEntry(entry),
+            entries,
           }));
         }
 
@@ -692,6 +702,7 @@ export async function action({request}: ActionFunctionArgs) {
             success: true,
             message: "Onderhoudsregel bijgewerkt.",
             entry: serializeServiceBookEntry(entry, urls),
+            entries: await serviceEntries(admin, shopDomain, customerId, profileId),
           }));
         }
 
@@ -708,7 +719,11 @@ export async function action({request}: ActionFunctionArgs) {
               deleteFile(admin, attachment.id),
             ),
           );
-          return cors(response({success: true, message: "Onderhoudsregel verwijderd."}));
+          return cors(response({
+            success: true,
+            message: "Onderhoudsregel verwijderd.",
+            entries: await serviceEntries(admin, shopDomain, customerId, profileId),
+          }));
         }
 
         if (body.intent === "service_upload_attachment") {
@@ -733,6 +748,7 @@ export async function action({request}: ActionFunctionArgs) {
               ? "Bewijsstuk aan het Digitaal serviceboek toegevoegd."
               : "Bewijsstuk opgeslagen en wordt door WetterWinkel verwerkt.",
             entry: serializeServiceBookEntry(entry, urls),
+            entries: await serviceEntries(admin, shopDomain, customerId, profileId),
           }));
         }
 
@@ -760,6 +776,7 @@ export async function action({request}: ActionFunctionArgs) {
             success: true,
             message: "Bijlage verwijderd.",
             entry: serializeServiceBookEntry(entry, urls),
+            entries: await serviceEntries(admin, shopDomain, customerId, profileId),
           }));
         }
 

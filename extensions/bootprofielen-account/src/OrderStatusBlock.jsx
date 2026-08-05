@@ -44,9 +44,19 @@ function Extension() {
       },
       ...(body ? {body: JSON.stringify(body)} : {}),
     });
-    const json = await result.json().catch(() => ({}));
+    const raw = await result.text();
+    let json = {};
+    try {
+      json = raw ? JSON.parse(raw) : {};
+    } catch {
+      json = {};
+    }
     if (!result.ok || !json.success) {
-      throw new Error(json.message || 'De server kon de aanvraag niet verwerken.');
+      throw new Error(
+        json.message ||
+        (raw && raw.length < 300 ? raw : '') ||
+        `De server kon de aanvraag niet verwerken (status ${result.status}).`,
+      );
     }
     return json;
   }
