@@ -218,10 +218,63 @@ function safeFilename(value: string) {
   return value.replace(/[^a-zA-Z0-9 -]/g, "").trim().replace(/\s+/g, "-").slice(0, 80) || "bootdossier";
 }
 
+function downloadPage(downloadUrl: string) {
+  const safeUrl = downloadUrl
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  return new Response(`<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>WetterWinkel bootdossier</title>
+    <style>
+      :root { color-scheme: light; font-family: Arial, Helvetica, sans-serif; }
+      body { margin: 0; background: #f4f7f9; color: #17202a; }
+      main { box-sizing: border-box; max-width: 560px; margin: 12vh auto; padding: 32px; background: white; border-radius: 16px; box-shadow: 0 12px 36px rgba(23, 32, 42, .12); }
+      h1 { margin: 0 0 12px; color: #07549b; font-size: 26px; }
+      p { margin: 0 0 24px; line-height: 1.5; }
+      a { display: inline-block; padding: 14px 20px; border-radius: 10px; background: #07549b; color: white; font-weight: 700; text-decoration: none; }
+      small { display: block; margin-top: 20px; color: #5b6770; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Uw bootdossier staat klaar</h1>
+      <p>Download hieronder het bootprofiel als PDF. Het serviceboek wordt later automatisch aan deze export toegevoegd.</p>
+      <a href="${safeUrl}">PDF downloaden</a>
+      <small>U kunt dit venster na het downloaden sluiten.</small>
+    </main>
+  </body>
+</html>`, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "private, no-store",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+    },
+  });
+}
+
 export async function loader({request}: LoaderFunctionArgs) {
   try {
     const url = new URL(request.url);
     const payload = verifyToken(url.searchParams.get("token") || "");
+
+    // A customer-account UI extension runs in a restricted Shopify frame.
+    // Direct attachment responses can be blocked by the browser. First open a
+    // regular top-level page, then let the customer start the real download.
+    if (url.searchParams.get("download") !== "1") {
+      url.searchParams.set("download", "1");
+      return downloadPage(url.toString());
+    }
+
     const {admin} = await unauthenticated.admin(payload.shop);
     const result = await admin.graphql(
       `#graphql
