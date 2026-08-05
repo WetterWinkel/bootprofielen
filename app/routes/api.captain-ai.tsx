@@ -1,14 +1,97 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { randomBytes } from "node:crypto";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { answerCaptainQuestion } from "../captain-ai.server";
+import { answerCaptainQuestion, type CaptainImage } from "../captain-ai.server";
 import prisma from "../db.server";
 import { authenticate, unauthenticated } from "../shopify.server";
 
 const METAFIELD_NAMESPACE = "$app";
 const METAFIELD_KEY = "bootprofielen";
 const MAX_MESSAGE_LENGTH = 1_500;
+const MAX_CAPTAIN_IMAGES = 3;
+const MAX_CAPTAIN_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_CAPTAIN_TOTAL_IMAGE_BYTES = 12 * 1024 * 1024;
+const MAX_CAPTAIN_REQUEST_BYTES = 18 * 1024 * 1024;
+const CAPTAIN_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const DAY_MS = 24 * 60 * 60 * 1_000;
+
+function imageSignatureMatches(
+  mimeType: CaptainImage["mimeType"],
+  data: Buffer,
+) {
+  if (mimeType === "image/jpeg") {
+    return (
+      data.length >= 3 &&
+      data[0] === 0xff &&
+      data[1] === 0xd8 &&
+      data[2] === 0xff
+    );
+  }
+  if (mimeType === "image/png") {
+    return (
+      data.length >= 8 &&
+      data
+        .subarray(0, 8)
+        .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    );
+  }
+  return (
+    data.length >= 12 &&
+    data.subarray(0, 4).toString("ascii") === "RIFF" &&
+    data.subarray(8, 12).toString("ascii") === "WEBP"
+  );
+}
+
+function captainImages(value: unknown): CaptainImage[] {
+  if (value == null) return [];
+  if (!Array.isArray(value))
+    throw new Error("De meegestuurde foto's zijn ongeldig.");
+  if (value.length > MAX_CAPTAIN_IMAGES) {
+    throw new Error(
+      `U kunt maximaal ${MAX_CAPTAIN_IMAGES} foto's per vraag meesturen.`,
+    );
+  }
+
+  let totalBytes = 0;
+  return value.map((raw, index) => {
+    if (!raw || typeof raw !== "object") {
+      throw new Error(`Foto ${index + 1} is ongeldig.`);
+    }
+    const record = raw as Record<string, unknown>;
+    const mimeType = String(record.mimeType || "").toLowerCase();
+    if (!CAPTAIN_IMAGE_TYPES.has(mimeType)) {
+      throw new Error("Gebruik alleen JPEG-, PNG- of WebP-foto's.");
+    }
+    const encoded = String(record.data || "").replace(/\s+/g, "");
+    if (
+      !encoded ||
+      encoded.length % 4 !== 0 ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)
+    ) {
+      throw new Error(`Foto ${index + 1} bevat geen geldige afbeeldingsdata.`);
+    }
+    const bytes = Buffer.from(encoded, "base64");
+    if (!bytes.length || bytes.length > MAX_CAPTAIN_IMAGE_BYTES) {
+      throw new Error(
+        `Iedere foto mag maximaal ${MAX_CAPTAIN_IMAGE_BYTES / 1024 / 1024} MB zijn.`,
+      );
+    }
+    totalBytes += bytes.length;
+    if (totalBytes > MAX_CAPTAIN_TOTAL_IMAGE_BYTES) {
+      throw new Error("De foto's samen mogen maximaal 12 MB zijn.");
+    }
+    if (!imageSignatureMatches(mimeType as CaptainImage["mimeType"], bytes)) {
+      throw new Error(
+        `Foto ${index + 1} komt niet overeen met het opgegeven bestandstype.`,
+      );
+    }
+    return {
+      name: String(record.name || `foto-${index + 1}`).slice(0, 120),
+      mimeType: mimeType as CaptainImage["mimeType"],
+      data: encoded,
+    };
+  });
+}
 
 function positiveInt(value: string | undefined, fallback: number) {
   const parsed = Number(value);
@@ -345,6 +428,18 @@ export async function action({ request }: ActionFunctionArgs) {
   if (request.method === "OPTIONS") return response({ success: true });
   try {
     const { admin, cors, shop, customerId } = await customerContext(request);
+    const contentLength = Number(request.headers.get("content-length") || 0);
+    if (contentLength > MAX_CAPTAIN_REQUEST_BYTES) {
+      return cors(
+        response(
+          {
+            success: false,
+            message: "De meegestuurde foto's zijn samen te groot.",
+          },
+          413,
+        ),
+      );
+    }
     const body = await request.json();
     const profileId = String(body.profileId ?? "");
     const profiles = await ownedProfiles(admin, customerId);
@@ -457,12 +552,29 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    const message = String(body.message ?? "").trim();
-    if (!message)
+    const rawMessage = String(body.message ?? "").trim();
+    let images: CaptainImage[];
+    try {
+      images = captainImages(body.images);
+    } catch (error: any) {
       return cors(
-        response({ success: false, message: "Typ eerst een vraag." }, 400),
+        response(
+          {
+            success: false,
+            message: error?.message || "De foto's zijn ongeldig.",
+          },
+          400,
+        ),
       );
-    if (message.length > MAX_MESSAGE_LENGTH) {
+    }
+    if (!rawMessage && !images.length)
+      return cors(
+        response(
+          { success: false, message: "Typ een vraag of voeg een foto toe." },
+          400,
+        ),
+      );
+    if (rawMessage.length > MAX_MESSAGE_LENGTH) {
       return cors(
         response(
           {
@@ -473,6 +585,12 @@ export async function action({ request }: ActionFunctionArgs) {
         ),
       );
     }
+    const message =
+      rawMessage ||
+      "Kunt u deze foto beoordelen in de context van mijn bootprofiel?";
+    const storedMessage = images.length
+      ? `${message}\n\n[${images.length} ${images.length === 1 ? "foto" : "foto's"} meegestuurd; afbeeldingen niet opgeslagen.]`
+      : message;
     const since = new Date(Date.now() - DAY_MS);
     const dailyLimit = positiveInt(process.env.CAPTAIN_AI_DAILY_LIMIT, 10);
     const globalDailyLimit = positiveInt(
@@ -597,7 +715,7 @@ export async function action({ request }: ActionFunctionArgs) {
         data: {
           conversationId: conversation.id,
           role: "USER",
-          content: message,
+          content: storedMessage,
           usageType,
         },
       });
@@ -640,6 +758,7 @@ export async function action({ request }: ActionFunctionArgs) {
         messages: history
           .reverse()
           .map((item) => ({ role: item.role, content: item.content })),
+        images,
       });
       const saved = await prisma.captainMessage.create({
         data: {

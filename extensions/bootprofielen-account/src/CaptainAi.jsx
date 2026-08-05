@@ -12,6 +12,23 @@ function productPrice(product) {
   }).format(amount);
 }
 
+async function fileBase64(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(
+      ...bytes.subarray(offset, offset + chunkSize),
+    );
+  }
+  return btoa(binary);
+}
+
+function selectedFiles(input) {
+  if (Array.isArray(input)) return input;
+  return Array.from(input?.currentTarget?.files || []);
+}
+
 function cleanAnswerText(value) {
   return String(value || "")
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
@@ -252,6 +269,53 @@ export function CaptainAi({ profileId, profile }) {
   const [consent, setConsent] = useState(false);
   const [usage, setUsage] = useState(null);
   const [checkoutUrl, setCheckoutUrl] = useState("");
+  const [questionImages, setQuestionImages] = useState([]);
+  const [imageInputKey, setImageInputKey] = useState(0);
+  const [imageError, setImageError] = useState("");
+
+  function chooseQuestionImages(input) {
+    const files = selectedFiles(input);
+    if (!files.length) return;
+    const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+    const next = [...questionImages];
+    let error = "";
+
+    for (const file of files) {
+      if (!allowedTypes.has(file.type)) {
+        error = "Gebruik alleen JPEG-, PNG- of WebP-foto's.";
+        continue;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        error = "Iedere foto mag maximaal 5 MB zijn.";
+        continue;
+      }
+      const duplicate = next.some(
+        (item) =>
+          item.name === file.name &&
+          item.size === file.size &&
+          item.lastModified === file.lastModified,
+      );
+      if (!duplicate) next.push(file);
+    }
+    if (next.length > 3) {
+      error = "U kunt maximaal 3 foto's per vraag meesturen.";
+      next.splice(3);
+    }
+    if (next.reduce((sum, file) => sum + file.size, 0) > 12 * 1024 * 1024) {
+      error = "De foto's samen mogen maximaal 12 MB zijn.";
+      return setImageError(error);
+    }
+    setQuestionImages(next);
+    setImageError(error);
+  }
+
+  function removeQuestionImage(index) {
+    setQuestionImages((current) =>
+      current.filter((_, itemIndex) => itemIndex !== index),
+    );
+    setImageError("");
+    setImageInputKey((value) => value + 1);
+  }
 
   async function request(method, body, query = "") {
     const token = await globalThis.shopify.sessionToken.get();
@@ -312,6 +376,9 @@ export function CaptainAi({ profileId, profile }) {
     setConsent(false);
     setUsage(null);
     setCheckoutUrl("");
+    setQuestionImages([]);
+    setImageError("");
+    setImageInputKey((value) => value + 1);
     if (open && profileId) loadConversation();
     // Een profielwissel reset bewust de chat; openen laadt het gesprek via toggle().
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -326,27 +393,45 @@ export function CaptainAi({ profileId, profile }) {
   }
 
   async function ask() {
-    const value = question.trim();
-    if (!value || busy) return;
+    const typedQuestion = question.trim();
+    const selectedImages = questionImages;
+    if ((!typedQuestion && !selectedImages.length) || busy) return;
+    const value =
+      typedQuestion ||
+      "Kunt u deze foto beoordelen in de context van mijn bootprofiel?";
     setBusy(true);
     setNotice("");
     const localId = `local-${Date.now()}`;
+    const localContent = selectedImages.length
+      ? `${value}\n\n[${selectedImages.length} ${selectedImages.length === 1 ? "foto" : "foto's"} meegestuurd; afbeeldingen niet opgeslagen.]`
+      : value;
     setMessages((old) => [
       ...old,
-      { id: localId, role: "USER", content: value },
+      { id: localId, role: "USER", content: localContent },
     ]);
     setQuestion("");
     try {
+      const images = await Promise.all(
+        selectedImages.map(async (file) => ({
+          name: file.name,
+          mimeType: file.type,
+          data: await fileBase64(file),
+        })),
+      );
       const json = await request("POST", {
         intent: "ask",
         profileId,
         conversationId,
         message: value,
+        images,
         improvementConsent: consent,
       });
       setConversationId(json.conversationId || conversationId);
       setMessages((old) => [...old, json.message]);
       setUsage(json.usage || usage);
+      setQuestionImages([]);
+      setImageError("");
+      setImageInputKey((inputKey) => inputKey + 1);
     } catch (error) {
       setMessages((old) => old.filter((message) => message.id !== localId));
       setQuestion(value);
@@ -392,6 +477,9 @@ export function CaptainAi({ profileId, profile }) {
       setConversationId(json.conversation?.id || "");
       setMessages([]);
       setQuestion("");
+      setQuestionImages([]);
+      setImageError("");
+      setImageInputKey((value) => value + 1);
       setNotice("Nieuw gesprek gestart.");
     } catch (error) {
       setNotice(error.message);
@@ -413,6 +501,9 @@ export function CaptainAi({ profileId, profile }) {
       setConversationId("");
       setMessages([]);
       setQuestion("");
+      setQuestionImages([]);
+      setImageError("");
+      setImageInputKey((value) => value + 1);
       setNotice(json.message || "Gesprek verwijderd.");
     } catch (error) {
       setNotice(error.message);
@@ -644,9 +735,44 @@ export function CaptainAi({ profileId, profile }) {
               onInput={(event) => setQuestion(event.currentTarget.value)}
               onChange={(event) => setQuestion(event.currentTarget.value)}
             />
+            <s-drop-zone
+              key={imageInputKey}
+              multiple
+              accept="image/jpeg,image/png,image/webp"
+              label="Foto toevoegen aan uw vraag (maximaal 3)"
+              error={imageError || undefined}
+              disabled={busy}
+              onInput={chooseQuestionImages}
+              onChange={chooseQuestionImages}
+            />
+            {questionImages.length > 0 && (
+              <s-stack gap="small-300">
+                {questionImages.map((file, index) => (
+                  <s-stack
+                    key={`${file.name}-${file.size}-${file.lastModified}`}
+                    direction="inline"
+                    gap="small-300"
+                    alignItems="center"
+                  >
+                    <s-text>{file.name}</s-text>
+                    <s-button
+                      onClick={() => removeQuestionImage(index)}
+                      disabled={busy}
+                      tone="critical"
+                    >
+                      Verwijderen
+                    </s-button>
+                  </s-stack>
+                ))}
+                <s-text>
+                  Foto&apos;s worden alleen voor dit antwoord geanalyseerd en
+                  niet in uw gesprek of bootprofiel opgeslagen.
+                </s-text>
+              </s-stack>
+            )}
             <s-button
               onClick={ask}
-              disabled={busy || !question.trim()}
+              disabled={busy || (!question.trim() && !questionImages.length)}
               variant="primary"
             >
               {busy ? "Captain AI denkt na..." : "Vraag stellen"}
