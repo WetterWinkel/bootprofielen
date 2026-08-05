@@ -2,6 +2,7 @@ import '@shopify/ui-extensions/preact';
 import {createContext, render} from 'preact';
 import {useContext, useEffect, useState} from 'preact/hooks';
 import {BoatMarketplace} from './BoatMarketplace.jsx';
+import {DigitalServiceBook} from './DigitalServiceBook.jsx';
 
 const API_URL =
   'https://bootprofielen.onrender.com/api/bootprofielen';
@@ -419,7 +420,13 @@ function Extension() {
         </FormContext.Provider>
       )}
 
-      <s-button disabled>▶ Serviceboek komt later</s-button>
+      <DigitalServiceBook
+        key={activeId || 'nieuw'}
+        api={api}
+        profileId={activeId}
+        profile={activeProfile}
+        fileBase64={fileBase64}
+      />
       <s-button disabled>▶ Captain AI komt later</s-button>
 
       <s-button onClick={() => setDossierOpen(!dossierOpen)}>
@@ -431,7 +438,7 @@ function Extension() {
       {dossierOpen && (
         <s-stack gap="base">
           <s-heading>Bootdossier exporteren</s-heading>
-          <s-text>De PDF bevat het gekozen bootprofiel en wordt automatisch uitgebreid met het serviceboek zodra dat beschikbaar is.</s-text>
+          <s-text>De PDF bevat het gekozen bootprofiel en alle regels uit het bijbehorende Digitaal serviceboek.</s-text>
           <s-button onClick={prepareExport} disabled={!activeId || dossierBusy}>
             {dossierBusy ? 'Even geduld...' : 'PDF voorbereiden'}
           </s-button>

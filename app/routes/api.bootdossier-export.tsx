@@ -1,6 +1,8 @@
 import type {LoaderFunctionArgs} from "react-router";
 import {createHmac, timingSafeEqual} from "node:crypto";
 import PDFDocument from "pdfkit";
+import prisma from "../db.server";
+import {serializeServiceBookEntry} from "../servicebook.server";
 import {unauthenticated} from "../shopify.server";
 
 const FIELD_LABELS: Record<string, string> = {
@@ -45,6 +47,8 @@ type ExportProfile = {
   name: string;
   data: Record<string, unknown>;
 };
+
+type ServiceBookPdfEntry = ReturnType<typeof serializeServiceBookEntry>;
 
 type MetaobjectField = {
   key: string;
@@ -126,7 +130,16 @@ async function imageBuffer(url: string | null) {
   }
 }
 
-async function createPdf(profile: ExportProfile, photo: Buffer | null) {
+function nlDate(value: string) {
+  return new Intl.DateTimeFormat("nl-NL", {dateStyle: "long"})
+    .format(new Date(`${value}T12:00:00.000Z`));
+}
+
+async function createPdf(
+  profile: ExportProfile,
+  photo: Buffer | null,
+  serviceEntries: ServiceBookPdfEntry[],
+) {
   const chunks: Buffer[] = [];
   const doc = new PDFDocument({
     size: "A4",
@@ -194,9 +207,55 @@ async function createPdf(profile: ExportProfile, photo: Buffer | null) {
 
   if (doc.y > doc.page.height - 180) doc.addPage();
   doc.moveDown(1.2).fillColor("#07549b").fontSize(14).font("Helvetica-Bold")
-    .text("Serviceboek");
-  doc.moveDown(0.5).fillColor("#34495e").fontSize(10).font("Helvetica")
-    .text("Er zijn nog geen serviceboekregels aan dit bootdossier toegevoegd. Zodra het WetterWinkel-serviceboek beschikbaar is, worden deze regels automatisch in deze export opgenomen.");
+    .text("Digitaal serviceboek");
+  doc.moveDown(0.5);
+
+  if (!serviceEntries.length) {
+    doc.fillColor("#34495e").fontSize(10).font("Helvetica")
+      .text("Er zijn nog geen onderhoudsregels aan deze boot toegevoegd.");
+  }
+
+  for (const entry of serviceEntries) {
+    const details = [
+      entry.component && ["Onderdeel / installatie", entry.component],
+      entry.engineHours !== "" && ["Motoruren", String(entry.engineHours)],
+      entry.performedBy && [entry.status === "PLANNED" ? "Uit te voeren door" : "Uitgevoerd door", entry.performedBy],
+      entry.partsMaterials && ["Onderdelen / materialen", entry.partsMaterials],
+      entry.reference && ["Referentie", entry.reference],
+      entry.cost && ["Kosten", `€ ${entry.cost}`],
+      entry.nextServiceHours !== "" && ["Volgende beurt bij", `${entry.nextServiceHours} motoruren`],
+      entry.nextServiceDate && ["Volgende beurt op", nlDate(entry.nextServiceDate)],
+      entry.attachments.length && ["Bijlagen", entry.attachments.map((file) => file.filename).join(", ")],
+    ].filter(Boolean) as Array<[string, string]>;
+
+    const estimatedHeight = 78 + details.reduce((height, [, value]) =>
+      height + Math.max(15, doc.fontSize(9).heightOfString(value, {width: 300}) + 7), 0,
+    ) + doc.fontSize(9).heightOfString(entry.description, {width: 465});
+    if (doc.y + Math.min(estimatedHeight, 360) > doc.page.height - doc.page.margins.bottom - 18) {
+      doc.addPage();
+    }
+
+    const cardTop = doc.y;
+    doc.fillColor("#eaf3fb").rect(doc.page.margins.left, cardTop, 491, 30).fill();
+    doc.fillColor("#07549b").fontSize(11).font("Helvetica-Bold")
+      .text(`${nlDate(entry.serviceDate)} · ${entry.title}`, doc.page.margins.left + 8, cardTop + 8, {width: 475});
+    doc.y = cardTop + 38;
+    doc.fillColor("#5b6770").fontSize(8).font("Helvetica-Bold")
+      .text(`${entry.status === "PLANNED" ? "GEPLAND" : "UITGEVOERD"} · ${entry.category}`);
+    doc.moveDown(0.55).fillColor("#17202a").fontSize(9).font("Helvetica")
+      .text(entry.description, {width: 475});
+    doc.moveDown(0.55);
+
+    for (const [label, value] of details) {
+      const rowY = doc.y;
+      doc.fillColor("#34495e").font("Helvetica-Bold")
+        .text(label, doc.page.margins.left, rowY, {width: 155});
+      doc.fillColor("#17202a").font("Helvetica")
+        .text(value, doc.page.margins.left + 160, rowY, {width: 315});
+      doc.y = Math.max(doc.y, rowY + doc.heightOfString(value, {width: 315})) + 6;
+    }
+    doc.moveDown(0.7);
+  }
 
   const pages = doc.bufferedPageRange();
   for (let index = pages.start; index < pages.start + pages.count; index += 1) {
@@ -244,7 +303,7 @@ function downloadPage(downloadUrl: string) {
   <body>
     <main>
       <h1>Uw bootdossier staat klaar</h1>
-      <p>Open hieronder het bootprofiel als PDF. Het serviceboek wordt later automatisch aan deze export toegevoegd.</p>
+      <p>Open hieronder het bootprofiel en het bijbehorende Digitaal serviceboek als PDF.</p>
       <a href="${safeUrl}">PDF openen en downloaden</a>
       <small>De PDF opent zichtbaar in uw browser. Gebruik daar de downloadknop om het bestand op te slaan.</small>
     </main>
@@ -310,7 +369,19 @@ export async function loader({request}: LoaderFunctionArgs) {
     }
     const name = String(data.naam_schip || data.model_boot || node.displayName || "Bootdossier");
     const photoUrl = node.photo?.reference?.image?.url ?? null;
-    const pdf = await createPdf({name, data}, await imageBuffer(photoUrl));
+    const serviceEntries = (await prisma.serviceBookEntry.findMany({
+      where: {
+        shop: payload.shop,
+        customerId: payload.customerId,
+        profileId: payload.profileId,
+      },
+      orderBy: [{serviceDate: "desc"}, {createdAt: "desc"}],
+    })).map((entry) => serializeServiceBookEntry(entry));
+    const pdf = await createPdf(
+      {name, data},
+      await imageBuffer(photoUrl),
+      serviceEntries,
+    );
     return new Response(new Uint8Array(pdf), {
       status: 200,
       headers: {

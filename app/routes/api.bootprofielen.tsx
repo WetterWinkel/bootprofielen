@@ -1,6 +1,12 @@
 import type {ActionFunctionArgs, LoaderFunctionArgs} from "react-router";
 import {createHmac, randomBytes} from "node:crypto";
 import prisma from "../db.server";
+import {
+  cleanServiceBookInput,
+  serializeServiceBookEntry,
+  serviceBookAttachments,
+  type ServiceBookAttachment,
+} from "../servicebook.server";
 import {authenticate, unauthenticated} from "../shopify.server";
 
 const METAOBJECT_TYPE = "$app:bootprofiel";
@@ -9,6 +15,8 @@ const METAFIELD_KEY = "bootprofielen";
 const OVERVIEW_METAFIELD_NAMESPACE = "custom";
 const OVERVIEW_METAFIELD_KEY = "bootprofielen_overzicht";
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_SERVICE_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+const MAX_SERVICE_ATTACHMENTS = 10;
 const TRANSFER_DAYS = 7;
 const TRANSFER_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -206,6 +214,15 @@ function imageMime(buffer: Buffer) {
   return null;
 }
 
+function attachmentMime(buffer: Buffer) {
+  const image = imageMime(buffer);
+  if (image) return {mimeType: image, resource: "IMAGE", contentType: "IMAGE"};
+  if (buffer.length >= 5 && buffer.subarray(0, 5).toString("ascii") === "%PDF-") {
+    return {mimeType: "application/pdf", resource: "FILE", contentType: "FILE"};
+  }
+  return null;
+}
+
 async function deleteFile(admin: any, id: string | null | undefined) {
   if (!id) return;
   try {
@@ -226,6 +243,159 @@ async function deleteFile(admin: any, id: string | null | undefined) {
   } catch (error) {
     console.warn("Oude bootfoto verwijderen mislukt", error);
   }
+}
+
+async function resolveServiceFileUrls(admin: any, entries: any[]) {
+  const ids = [...new Set(entries.flatMap((entry) =>
+    serviceBookAttachments(entry.attachments).map((attachment) => attachment.id),
+  ))];
+  if (!ids.length) return new Map<string, string>();
+
+  try {
+    const result = await admin.graphql(
+      `#graphql
+        query ResolveServicebookFiles($ids: [ID!]!) {
+          nodes(ids: $ids) {
+            ... on MediaImage { id image { url } }
+            ... on GenericFile { id url }
+          }
+        }
+      `,
+      {variables: {ids}},
+    );
+    const json: any = await result.json();
+    if (json.errors?.length) throw new Error(json.errors[0].message);
+    return new Map<string, string>(
+      (json.data?.nodes ?? []).flatMap((node: any) => {
+        const url = node?.image?.url ?? node?.url;
+        return node?.id && url ? [[node.id, url] as [string, string]] : [];
+      }),
+    );
+  } catch (error) {
+    console.warn("Serviceboekbijlagen ophalen mislukt", error);
+    return new Map<string, string>();
+  }
+}
+
+async function serviceEntries(
+  admin: any,
+  shop: string,
+  customerId: string,
+  profileId: string,
+) {
+  const entries = await prisma.serviceBookEntry.findMany({
+    where: {shop, customerId, profileId},
+    orderBy: [{serviceDate: "desc"}, {createdAt: "desc"}],
+  });
+  const urls = await resolveServiceFileUrls(admin, entries);
+  return entries.map((entry) => serializeServiceBookEntry(entry, urls));
+}
+
+async function ownedServiceEntry(
+  shop: string,
+  customerId: string,
+  profileId: string,
+  entryId: unknown,
+) {
+  const entry = await prisma.serviceBookEntry.findFirst({
+    where: {id: String(entryId ?? ""), shop, customerId, profileId},
+  });
+  if (!entry) throw new Error("Serviceboekregel niet gevonden");
+  return entry;
+}
+
+async function uploadServiceAttachment(
+  admin: any,
+  entry: any,
+  input: any,
+): Promise<ServiceBookAttachment> {
+  const current = serviceBookAttachments(entry.attachments);
+  if (current.length >= MAX_SERVICE_ATTACHMENTS) {
+    throw new Error(`Per serviceboekregel zijn maximaal ${MAX_SERVICE_ATTACHMENTS} bijlagen toegestaan`);
+  }
+
+  const rawBase64 = String(input?.data ?? "").replace(/^data:[^;]+;base64,/, "");
+  if (!rawBase64) throw new Error("Selecteer eerst een bewijsstuk of foto");
+  const buffer = Buffer.from(rawBase64, "base64");
+  if (!buffer.length) throw new Error("De bijlage kon niet worden gelezen");
+  if (buffer.length > MAX_SERVICE_ATTACHMENT_BYTES) {
+    throw new Error("Een serviceboekbijlage mag maximaal 15 MB zijn");
+  }
+  const kind = attachmentMime(buffer);
+  if (!kind) throw new Error("Gebruik een JPG-, PNG-, WebP-, GIF-, HEIC- of PDF-bestand");
+
+  const filename = safeFilename(input?.filename || "serviceboek-bijlage");
+  const stagedResult = await admin.graphql(
+    `#graphql
+      mutation StageServicebookFile($input: [StagedUploadInput!]!) {
+        stagedUploadsCreate(input: $input) {
+          stagedTargets { url resourceUrl parameters { name value } }
+          userErrors { field message }
+        }
+      }
+    `,
+    {
+      variables: {
+        input: [{
+          filename,
+          mimeType: kind.mimeType,
+          httpMethod: "POST",
+          resource: kind.resource,
+        }],
+      },
+    },
+  );
+  const stagedJson: any = await stagedResult.json();
+  const stagedErrors = stagedJson.data?.stagedUploadsCreate?.userErrors ?? stagedJson.errors ?? [];
+  const target = stagedJson.data?.stagedUploadsCreate?.stagedTargets?.[0];
+  if (!target || stagedErrors.length) {
+    throw new Error(stagedErrors[0]?.message || "Bijlage-upload voorbereiden mislukt");
+  }
+
+  const form = new FormData();
+  for (const parameter of target.parameters ?? []) form.append(parameter.name, parameter.value);
+  form.append("file", new Blob([new Uint8Array(buffer)], {type: kind.mimeType}), filename);
+  const uploaded = await fetch(target.url, {method: "POST", body: form});
+  if (!uploaded.ok) throw new Error(`Bijlage uploaden mislukt (${uploaded.status})`);
+
+  const fileResult = await admin.graphql(
+    `#graphql
+      mutation CreateServicebookFile($files: [FileCreateInput!]!) {
+        fileCreate(files: $files) {
+          files {
+            id
+            fileStatus
+            ... on MediaImage { image { url } }
+            ... on GenericFile { url }
+          }
+          userErrors { field message code }
+        }
+      }
+    `,
+    {
+      variables: {
+        files: [{
+          originalSource: target.resourceUrl,
+          contentType: kind.contentType,
+          alt: `Serviceboek: ${entry.title}`,
+        }],
+      },
+    },
+  );
+  const fileJson: any = await fileResult.json();
+  const errors = fileJson.data?.fileCreate?.userErrors ?? fileJson.errors ?? [];
+  const file = fileJson.data?.fileCreate?.files?.[0];
+  if (!file?.id || errors.length) {
+    throw new Error(errors[0]?.message || "Bijlage opslaan in Shopify mislukt");
+  }
+
+  return {
+    id: file.id,
+    filename,
+    mimeType: kind.mimeType,
+    url: file.image?.url ?? file.url ?? null,
+    createdAt: new Date().toISOString(),
+  };
 }
 
 async function uploadPhoto(admin: any, profile: any, input: any) {
@@ -475,6 +645,127 @@ export async function action({request}: ActionFunctionArgs) {
         }));
       }
 
+      if (String(body.intent ?? "").startsWith("service_")) {
+        const profileId = String(body.profileId ?? body.id ?? "");
+        if (!ownedIds.includes(profileId)) {
+          return cors(response({success: false, message: "Bootprofiel niet gevonden"}, 404));
+        }
+
+        if (body.intent === "service_list") {
+          return cors(response({
+            success: true,
+            entries: await serviceEntries(admin, shopDomain, customerId, profileId),
+          }));
+        }
+
+        if (body.intent === "service_create") {
+          const data = cleanServiceBookInput(body.entry);
+          const entry = await prisma.serviceBookEntry.create({
+            data: {
+              shop: shopDomain,
+              customerId,
+              profileId,
+              attachments: [],
+              ...data,
+            },
+          });
+          return cors(response({
+            success: true,
+            message: "Onderhoudsregel opgeslagen in uw Digitaal serviceboek.",
+            entry: serializeServiceBookEntry(entry),
+          }));
+        }
+
+        if (body.intent === "service_update") {
+          const current = await ownedServiceEntry(
+            shopDomain,
+            customerId,
+            profileId,
+            body.entryId,
+          );
+          const entry = await prisma.serviceBookEntry.update({
+            where: {id: current.id},
+            data: cleanServiceBookInput(body.entry),
+          });
+          const urls = await resolveServiceFileUrls(admin, [entry]);
+          return cors(response({
+            success: true,
+            message: "Onderhoudsregel bijgewerkt.",
+            entry: serializeServiceBookEntry(entry, urls),
+          }));
+        }
+
+        if (body.intent === "service_delete") {
+          const current = await ownedServiceEntry(
+            shopDomain,
+            customerId,
+            profileId,
+            body.entryId,
+          );
+          await prisma.serviceBookEntry.delete({where: {id: current.id}});
+          await Promise.all(
+            serviceBookAttachments(current.attachments).map((attachment) =>
+              deleteFile(admin, attachment.id),
+            ),
+          );
+          return cors(response({success: true, message: "Onderhoudsregel verwijderd."}));
+        }
+
+        if (body.intent === "service_upload_attachment") {
+          const current = await ownedServiceEntry(
+            shopDomain,
+            customerId,
+            profileId,
+            body.entryId,
+          );
+          const attachment = await uploadServiceAttachment(admin, current, body.attachment);
+          const entry = await prisma.serviceBookEntry.update({
+            where: {id: current.id},
+            data: {
+              attachments: [...serviceBookAttachments(current.attachments), attachment],
+            },
+          });
+          const urls = new Map<string, string>();
+          if (attachment.url) urls.set(attachment.id, attachment.url);
+          return cors(response({
+            success: true,
+            message: attachment.url
+              ? "Bewijsstuk aan het Digitaal serviceboek toegevoegd."
+              : "Bewijsstuk opgeslagen en wordt door WetterWinkel verwerkt.",
+            entry: serializeServiceBookEntry(entry, urls),
+          }));
+        }
+
+        if (body.intent === "service_delete_attachment") {
+          const current = await ownedServiceEntry(
+            shopDomain,
+            customerId,
+            profileId,
+            body.entryId,
+          );
+          const attachmentId = String(body.attachmentId ?? "");
+          const currentAttachments = serviceBookAttachments(current.attachments);
+          if (!currentAttachments.some((attachment) => attachment.id === attachmentId)) {
+            return cors(response({success: false, message: "Bijlage niet gevonden"}, 404));
+          }
+          const entry = await prisma.serviceBookEntry.update({
+            where: {id: current.id},
+            data: {
+              attachments: currentAttachments.filter((attachment) => attachment.id !== attachmentId),
+            },
+          });
+          await deleteFile(admin, attachmentId);
+          const urls = await resolveServiceFileUrls(admin, [entry]);
+          return cors(response({
+            success: true,
+            message: "Bijlage verwijderd.",
+            entry: serializeServiceBookEntry(entry, urls),
+          }));
+        }
+
+        return cors(response({success: false, message: "Onbekende serviceboekactie"}, 400));
+      }
+
       if (body.intent === "create_export") {
         const profileId = String(body.id ?? "");
         if (!profiles.some((item: any) => item.id === profileId)) {
@@ -569,6 +860,17 @@ export async function action({request}: ActionFunctionArgs) {
             transfer.fromCustomerId,
             sourceIds.filter((id: string) => id !== transfer.profileId),
           );
+          // Het complete Digitaal serviceboek verhuist mee met de boot. De
+          // inhoud blijft aan hetzelfde bootprofiel gekoppeld, maar is vanaf
+          // dit moment uitsluitend zichtbaar voor de nieuwe klant.
+          await prisma.serviceBookEntry.updateMany({
+            where: {
+              shop: shopDomain,
+              profileId: transfer.profileId,
+              customerId: transfer.fromCustomerId,
+            },
+            data: {customerId},
+          });
         } catch (transferError) {
           try {
             await setProfileCustomer(admin, transfer.profileId, transfer.fromCustomerId);
@@ -696,6 +998,19 @@ export async function action({request}: ActionFunctionArgs) {
       const errors = json.data?.metaobjectDelete?.userErrors ?? json.errors ?? [];
       if (errors.length) throw new Error(errors[0].message);
       const deleted = profiles.find((profile: any) => profile.id === profileId);
+      const deletedEntries = await prisma.serviceBookEntry.findMany({
+        where: {shop: shopDomain, customerId, profileId},
+      });
+      await prisma.serviceBookEntry.deleteMany({
+        where: {shop: shopDomain, customerId, profileId},
+      });
+      await Promise.all(
+        deletedEntries.flatMap((entry) =>
+          serviceBookAttachments(entry.attachments).map((attachment) =>
+            deleteFile(admin, attachment.id),
+          ),
+        ),
+      );
       await deleteFile(admin, deleted?.photoId);
       return cors(response({success: true, message: "Bootprofiel verwijderd"}));
     }

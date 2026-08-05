@@ -14,21 +14,21 @@ datasource db {
 }
 
 model Session {
-  id            String    @id
-  shop          String
-  state         String
-  isOnline      Boolean   @default(false)
-  scope         String?
-  expires       DateTime?
-  accessToken   String
-  userId        BigInt?
-  firstName     String?
-  lastName      String?
-  email         String?
-  accountOwner  Boolean   @default(false)
-  locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
@@ -46,6 +46,39 @@ model BoatTransfer {
   @@index([expiresAt])
 }
 
+enum ServiceBookStatus {
+  COMPLETED
+  PLANNED
+}
+
+model ServiceBookEntry {
+  id               String            @id @default(cuid())
+  shop             String
+  customerId       String
+  profileId        String
+  status           ServiceBookStatus @default(COMPLETED)
+  serviceDate      DateTime
+  category         String
+  component        String?
+  title            String
+  description      String
+  engineHours      Int?
+  performedBy      String?
+  partsMaterials   String?
+  reference        String?
+  costCents        Int?
+  nextServiceHours Int?
+  nextServiceDate  DateTime?
+  reminderEnabled  Boolean           @default(true)
+  attachments      Json              @default("[]")
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([shop, customerId, profileId, serviceDate])
+  @@index([shop, profileId])
+  @@index([nextServiceDate])
+}
+
 enum BoatListingStatus {
   DRAFT
   AWAITING_PAYMENT
@@ -57,35 +90,35 @@ enum BoatListingStatus {
 }
 
 model BoatListing {
-  id               String            @id @default(cuid())
-  shop             String
-  customerId       String
-  profileId        String
-  slug             String            @unique
-  status           BoatListingStatus @default(DRAFT)
-  title            String
-  description      String
-  priceCents       Int
-  currency         String            @default("EUR")
-  sellerType       String
-  vatStatus        String
-  location         String
-  publicData       Json
-  photos           Json
-  coverPhotoUrl    String?
-  paymentToken     String?           @unique
-  draftOrderId     String?           @unique
-  paidOrderId      String?           @unique
-  paidAt           DateTime?
-  publishedAt      DateTime?
-  expiresAt        DateTime?
-  soldAt           DateTime?
-  rejectionReason  String?
-  termsAcceptedAt  DateTime?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  inquiries        BoatListingInquiry[]
-  reports          BoatListingReport[]
+  id              String               @id @default(cuid())
+  shop            String
+  customerId      String
+  profileId       String
+  slug            String               @unique
+  status          BoatListingStatus    @default(DRAFT)
+  title           String
+  description     String
+  priceCents      Int
+  currency        String               @default("EUR")
+  sellerType      String
+  vatStatus       String
+  location        String
+  publicData      Json
+  photos          Json
+  coverPhotoUrl   String?
+  paymentToken    String?              @unique
+  draftOrderId    String?              @unique
+  paidOrderId     String?              @unique
+  paidAt          DateTime?
+  publishedAt     DateTime?
+  expiresAt       DateTime?
+  soldAt          DateTime?
+  rejectionReason String?
+  termsAcceptedAt DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  inquiries       BoatListingInquiry[]
+  reports         BoatListingReport[]
 
   @@index([shop, customerId, updatedAt])
   @@index([shop, status, publishedAt])
@@ -107,15 +140,15 @@ model BoatListingInquiry {
 }
 
 model BoatListingReport {
-  id        String      @id @default(cuid())
-  listingId String
-  name      String
-  email     String
-  reason    String
-  details   String
-  createdAt DateTime    @default(now())
+  id         String      @id @default(cuid())
+  listingId  String
+  name       String
+  email      String
+  reason     String
+  details    String
+  createdAt  DateTime    @default(now())
   resolvedAt DateTime?
-  listing   BoatListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listing    BoatListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@index([listingId, createdAt])
   @@index([resolvedAt])
