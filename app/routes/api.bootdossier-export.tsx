@@ -244,9 +244,9 @@ function downloadPage(downloadUrl: string) {
   <body>
     <main>
       <h1>Uw bootdossier staat klaar</h1>
-      <p>Download hieronder het bootprofiel als PDF. Het serviceboek wordt later automatisch aan deze export toegevoegd.</p>
-      <a href="${safeUrl}">PDF downloaden</a>
-      <small>U kunt dit venster na het downloaden sluiten.</small>
+      <p>Open hieronder het bootprofiel als PDF. Het serviceboek wordt later automatisch aan deze export toegevoegd.</p>
+      <a href="${safeUrl}">PDF openen en downloaden</a>
+      <small>De PDF opent zichtbaar in uw browser. Gebruik daar de downloadknop om het bestand op te slaan.</small>
     </main>
   </body>
 </html>`, {
@@ -315,7 +315,11 @@ export async function loader({request}: LoaderFunctionArgs) {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${safeFilename(name)}-bootdossier.pdf"`,
+        // Showing the PDF in the browser is more reliable than a silent
+        // attachment download from a Shopify customer-account flow. The
+        // browser's PDF viewer still provides its normal download button.
+        "Content-Disposition": `inline; filename="${safeFilename(name)}-bootdossier.pdf"`,
+        "Content-Length": String(pdf.byteLength),
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
       },
