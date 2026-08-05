@@ -4,6 +4,8 @@ import {authenticate, unauthenticated} from "../shopify.server";
 const METAOBJECT_TYPE = "$app:bootprofiel";
 const METAFIELD_NAMESPACE = "$app";
 const METAFIELD_KEY = "bootprofielen";
+const OVERVIEW_METAFIELD_NAMESPACE = "custom";
+const OVERVIEW_METAFIELD_KEY = "bootprofielen_overzicht";
 
 function response(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -102,29 +104,43 @@ async function linkedProfiles(admin: any, customerId: string) {
 }
 
 async function setLinkedIds(admin: any, customerId: string, ids: string[]) {
-  const result = await admin.graphql(
-    `#graphql
-      mutation LinkBootprofielen($metafields: [MetafieldsSetInput!]!) {
-        metafieldsSet(metafields: $metafields) {
-          userErrors { field message code }
+  const setMetafield = async (namespace: string, key: string) => {
+    const result = await admin.graphql(
+      `#graphql
+        mutation LinkBootprofielen($metafields: [MetafieldsSetInput!]!) {
+          metafieldsSet(metafields: $metafields) {
+            userErrors { field message code }
+          }
         }
-      }
-    `,
-    {
-      variables: {
-        metafields: [{
-          ownerId: customerId,
-          namespace: METAFIELD_NAMESPACE,
-          key: METAFIELD_KEY,
-          type: "list.metaobject_reference",
-          value: JSON.stringify(ids),
-        }],
+      `,
+      {
+        variables: {
+          metafields: [{
+            ownerId: customerId,
+            namespace,
+            key,
+            type: "list.metaobject_reference",
+            value: JSON.stringify(ids),
+          }],
+        },
       },
-    },
-  );
-  const json: any = await result.json();
-  const errors = json.data?.metafieldsSet?.userErrors ?? json.errors ?? [];
-  if (errors.length) throw new Error(errors[0].message);
+    );
+    const json: any = await result.json();
+    const errors = json.data?.metafieldsSet?.userErrors ?? json.errors ?? [];
+    if (errors.length) throw new Error(errors[0].message);
+  };
+
+  // Het appveld blijft de beveiligde bron die de klantaccount-API gebruikt.
+  await setMetafield(METAFIELD_NAMESPACE, METAFIELD_KEY);
+
+  // Deze merchant-owned spiegel is alleen voor een vast overzicht in Shopify
+  // Admin. Opslaan voor de klant mag nooit stuklopen als dit overzicht nog
+  // niet eenmalig door de winkelier is ingesteld.
+  try {
+    await setMetafield(OVERVIEW_METAFIELD_NAMESPACE, OVERVIEW_METAFIELD_KEY);
+  } catch (error) {
+    console.warn("Bootprofielen-klantoverzicht synchroniseren mislukt", error);
+  }
 }
 
 function cleanProfile(input: unknown) {

@@ -33,6 +33,7 @@ redirect_urls = [
 [metaobjects.app.bootprofiel]
 name = "Bootprofiel"
 description = "Persoonlijk bootprofiel van een WetterWinkel-klant"
+display_name_field = "naam"
 
   [metaobjects.app.bootprofiel.access]
   admin = "merchant_read_write"
