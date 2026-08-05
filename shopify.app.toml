@@ -21,7 +21,7 @@ api_version = "2025-10"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_customers,write_customers,read_metaobjects,write_metaobjects,read_metaobject_definitions,write_metaobject_definitions"
+scopes = "read_customers,write_customers,read_metaobjects,write_metaobjects,read_metaobject_definitions,write_metaobject_definitions,read_files,write_files"
 
 [auth]
 redirect_urls = [
@@ -52,6 +52,11 @@ required = true
 name = "Shopify klant-ID"
 type = "single_line_text_field"
 required = true
+
+[metaobjects.app.bootprofiel.fields.bootfoto]
+name = "Bootfoto"
+description = "Foto die door de eigenaar aan dit bootprofiel is toegevoegd"
+type = "file_reference"
 
 [customer.metafields.app.bootprofielen]
 name = "Bootprofielen"

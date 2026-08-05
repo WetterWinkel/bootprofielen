@@ -19,6 +19,9 @@ function Extension() {
   const [form, setForm] = useState({});
   const [profiles, setProfiles] = useState([]);
   const [activeId, setActiveId] = useState('');
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoError, setPhotoError] = useState('');
+  const [photoInputKey, setPhotoInputKey] = useState(0);
 
   const update = (key, value) =>
     setForm((old) => ({...old, [key]: value}));
@@ -58,13 +61,44 @@ function Extension() {
     const selected = profiles.find((profile) => profile.id === id);
     setActiveId(id);
     setForm(selected?.data || {});
+    setPhotoFile(null);
+    setPhotoError('');
+    setPhotoInputKey((value) => value + 1);
     setMessage('');
   }
 
   function newProfile() {
     setActiveId('');
     setForm({});
+    setPhotoFile(null);
+    setPhotoError('');
+    setPhotoInputKey((value) => value + 1);
     setMessage('Nieuw bootprofiel geopend.');
+  }
+
+  function selectPhoto(event) {
+    const file = event.currentTarget.files?.[0];
+    setPhotoError('');
+    if (!file) {
+      setPhotoFile(null);
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setPhotoFile(null);
+      setPhotoError('De bootfoto mag maximaal 20 MB zijn.');
+      return;
+    }
+    setPhotoFile(file);
+  }
+
+  async function fileBase64(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+    }
+    return btoa(binary);
   }
 
   async function saveBootprofiel() {
@@ -75,7 +109,29 @@ function Extension() {
       const json = activeId
         ? await api('PATCH', {id: activeId, data: form})
         : await api('POST', form);
-      const saved = json.profile;
+      let saved = json.profile;
+      let savedMessage = json.message || 'Bootprofiel opgeslagen.';
+
+      if (photoFile) {
+        try {
+          const photoJson = await api('POST', {
+            intent: 'upload_photo',
+            id: saved.id,
+            photo: {
+              filename: photoFile.name,
+              mimeType: photoFile.type,
+              data: await fileBase64(photoFile),
+            },
+          });
+          saved = photoJson.profile;
+          savedMessage = photoJson.message || 'Bootprofiel en foto opgeslagen.';
+          setPhotoFile(null);
+          setPhotoInputKey((value) => value + 1);
+        } catch (photoUploadError) {
+          savedMessage = `Bootprofiel is opgeslagen, maar de foto niet: ${photoUploadError.message}`;
+        }
+      }
+
       setActiveId(saved.id);
       setProfiles((old) => {
         const exists = old.some((profile) => profile.id === saved.id);
@@ -83,7 +139,7 @@ function Extension() {
           ? old.map((profile) => profile.id === saved.id ? saved : profile)
           : [...old, saved];
       });
-      setMessage(json.message || 'Bootprofiel opgeslagen.');
+      setMessage(savedMessage);
     } catch (error) {
       console.error('Bootprofiel opslaan mislukt', error);
       setMessage('Opslaan mislukt. De verbinding met de server werkt niet.');
@@ -91,6 +147,8 @@ function Extension() {
       setSaving(false);
     }
   }
+
+  const activeProfile = profiles.find((profile) => profile.id === activeId);
 
   async function deleteProfile() {
     if (!activeId || saving) return;
@@ -135,6 +193,23 @@ function Extension() {
 
           <s-button onClick={newProfile}>Nieuwe boot toevoegen</s-button>
           <s-heading>1. Basisgegevens</s-heading>
+          {activeProfile?.photoUrl && (
+            <s-image
+              src={activeProfile.photoUrl}
+              alt={activeProfile.photoAlt || activeProfile.data?.naam_schip || 'Bootfoto'}
+              aspectRatio="16/9"
+            />
+          )}
+          <s-drop-zone
+            key={photoInputKey}
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif"
+            label={activeProfile?.photoUrl ? 'Bootfoto vervangen' : 'Bootfoto toevoegen'}
+            error={photoError || undefined}
+            disabled={saving}
+            onInput={selectPhoto}
+            onChange={selectPhoto}
+          />
+          {photoFile && <s-text>Geselecteerd: {photoFile.name}</s-text>}
           <Field label="Naam schip" name="naam_schip" update={update} />
           <Field label="Merk boot" name="merk_boot" update={update} />
           <Field label="Model boot" name="model_boot" update={update} />

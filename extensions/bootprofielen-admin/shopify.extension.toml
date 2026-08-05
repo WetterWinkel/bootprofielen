@@ -1,0 +1,10 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "Bootprofielen klantoverzicht"
+handle = "bootprofielen-klantoverzicht"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/CustomerDetailsBlock.jsx"
+target = "admin.customer-details.block.render"
