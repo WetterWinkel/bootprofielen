@@ -22,6 +22,12 @@ function Extension() {
   const [photoFile, setPhotoFile] = useState(null);
   const [photoError, setPhotoError] = useState('');
   const [photoInputKey, setPhotoInputKey] = useState(0);
+  const [dossierOpen, setDossierOpen] = useState(false);
+  const [dossierBusy, setDossierBusy] = useState(false);
+  const [exportUrl, setExportUrl] = useState('');
+  const [transferCode, setTransferCode] = useState('');
+  const [transferExpiresAt, setTransferExpiresAt] = useState('');
+  const [claimCode, setClaimCode] = useState('');
 
   const update = (key, value) =>
     setForm((old) => ({...old, [key]: value}));
@@ -64,6 +70,9 @@ function Extension() {
     setPhotoFile(null);
     setPhotoError('');
     setPhotoInputKey((value) => value + 1);
+    setExportUrl('');
+    setTransferCode('');
+    setTransferExpiresAt('');
     setMessage('');
   }
 
@@ -73,6 +82,9 @@ function Extension() {
     setPhotoFile(null);
     setPhotoError('');
     setPhotoInputKey((value) => value + 1);
+    setExportUrl('');
+    setTransferCode('');
+    setTransferExpiresAt('');
     setMessage('Nieuw bootprofiel geopend.');
   }
 
@@ -165,6 +177,79 @@ function Extension() {
       setMessage(error.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function prepareExport() {
+    if (!activeId || dossierBusy) return;
+    setDossierBusy(true);
+    setExportUrl('');
+    setMessage('');
+    try {
+      const json = await api('POST', {intent: 'create_export', id: activeId});
+      setExportUrl(json.url || '');
+      setMessage(json.message || 'De PDF staat klaar.');
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setDossierBusy(false);
+    }
+  }
+
+  async function createTransfer() {
+    if (!activeId || dossierBusy) return;
+    setDossierBusy(true);
+    setTransferCode('');
+    setTransferExpiresAt('');
+    setMessage('');
+    try {
+      const json = await api('POST', {intent: 'create_transfer', id: activeId});
+      setTransferCode(json.code || '');
+      setTransferExpiresAt(json.expiresAt || '');
+      setMessage(json.message || 'Overdrachtscode aangemaakt.');
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setDossierBusy(false);
+    }
+  }
+
+  async function cancelTransfer() {
+    if (!activeId || dossierBusy) return;
+    setDossierBusy(true);
+    setMessage('');
+    try {
+      const json = await api('POST', {intent: 'cancel_transfer', id: activeId});
+      setTransferCode('');
+      setTransferExpiresAt('');
+      setMessage(json.message || 'Overdracht ingetrokken.');
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setDossierBusy(false);
+    }
+  }
+
+  async function claimTransfer() {
+    if (!claimCode.trim() || dossierBusy) return;
+    setDossierBusy(true);
+    setMessage('');
+    try {
+      const json = await api('POST', {intent: 'claim_transfer', code: claimCode});
+      const items = json.profiles || [];
+      const received = json.profile;
+      setProfiles(items);
+      setActiveId(received?.id || items[0]?.id || '');
+      setForm(received?.data || items[0]?.data || {});
+      setClaimCode('');
+      setExportUrl('');
+      setTransferCode('');
+      setTransferExpiresAt('');
+      setMessage(json.message || 'Bootprofiel ontvangen.');
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setDossierBusy(false);
     }
   }
 
@@ -331,6 +416,47 @@ function Extension() {
           {message && <s-text>{message}</s-text>}
         </s-stack>
         </FormContext.Provider>
+      )}
+
+      <s-button onClick={() => setDossierOpen(!dossierOpen)}>
+        {dossierOpen ? '▼ Export en overdracht sluiten' : '▶ Export en boot overdragen'}
+      </s-button>
+
+      {dossierOpen && (
+        <s-stack gap="base">
+          <s-heading>Bootdossier exporteren</s-heading>
+          <s-text>De PDF bevat het gekozen bootprofiel en wordt automatisch uitgebreid met het serviceboek zodra dat beschikbaar is.</s-text>
+          <s-button onClick={prepareExport} disabled={!activeId || dossierBusy}>
+            {dossierBusy ? 'Even geduld...' : 'PDF voorbereiden'}
+          </s-button>
+          {exportUrl && (
+            <s-button href={exportUrl} target="_blank">PDF downloaden</s-button>
+          )}
+
+          <s-heading>Boot verkopen of overdragen</s-heading>
+          <s-text>Maak een tijdelijke code en geef deze alleen aan de koper. De boot blijft in uw profiel totdat de koper de code in zijn eigen WetterWinkel-account accepteert.</s-text>
+          <s-button onClick={createTransfer} disabled={!activeId || dossierBusy}>
+            Overdrachtscode maken
+          </s-button>
+          {transferCode && (
+            <s-stack gap="small-300">
+              <s-text-field label="Overdrachtscode" value={transferCode} readOnly />
+              {transferExpiresAt && <s-text>Geldig tot {new Date(transferExpiresAt).toLocaleString('nl-NL')}.</s-text>}
+              <s-button onClick={cancelTransfer} disabled={dossierBusy}>Code intrekken</s-button>
+            </s-stack>
+          )}
+
+          <s-heading>Een boot ontvangen</s-heading>
+          <s-text-field
+            label="Code van de verkoper"
+            value={claimCode}
+            onInput={(event) => setClaimCode(event.currentTarget.value)}
+            onChange={(event) => setClaimCode(event.currentTarget.value)}
+          />
+          <s-button onClick={claimTransfer} disabled={!claimCode.trim() || dossierBusy}>
+            Boot aan mijn profiel koppelen
+          </s-button>
+        </s-stack>
       )}
 
       <s-button disabled>▶ Serviceboek komt later</s-button>

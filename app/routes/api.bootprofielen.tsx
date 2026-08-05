@@ -1,4 +1,6 @@
 import type {ActionFunctionArgs, LoaderFunctionArgs} from "react-router";
+import {createHmac, randomBytes} from "node:crypto";
+import prisma from "../db.server";
 import {authenticate, unauthenticated} from "../shopify.server";
 
 const METAOBJECT_TYPE = "$app:bootprofiel";
@@ -7,6 +9,8 @@ const METAFIELD_KEY = "bootprofielen";
 const OVERVIEW_METAFIELD_NAMESPACE = "custom";
 const OVERVIEW_METAFIELD_KEY = "bootprofielen_overzicht";
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const TRANSFER_DAYS = 7;
+const TRANSFER_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function response(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -45,7 +49,57 @@ async function context(request: Request) {
     admin,
     cors,
     customerId: customerGid((sessionToken as any).sub),
+    shopDomain,
   };
+}
+
+function appSecret() {
+  const secret = process.env.SHOPIFY_API_SECRET;
+  if (!secret) throw new Error("SHOPIFY_API_SECRET ontbreekt");
+  return secret;
+}
+
+function transferCode() {
+  const bytes = randomBytes(8);
+  const value = Array.from(bytes, (byte) =>
+    TRANSFER_ALPHABET[byte % TRANSFER_ALPHABET.length],
+  ).join("");
+  return `WW-${value.slice(0, 4)}-${value.slice(4)}`;
+}
+
+function normalizedTransferCode(value: unknown) {
+  return String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function transferCodeHash(shopDomain: string, code: string) {
+  return createHmac("sha256", appSecret())
+    .update(`${shopDomain}|${normalizedTransferCode(code)}`)
+    .digest("hex");
+}
+
+function exportToken(payload: {
+  shop: string;
+  customerId: string;
+  profileId: string;
+  exp: number;
+}) {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", appSecret())
+    .update(encoded)
+    .digest("base64url");
+  return `${encoded}.${signature}`;
+}
+
+function exportUrl(request: Request, shopDomain: string, customerId: string, profileId: string) {
+  const token = exportToken({
+    shop: shopDomain,
+    customerId,
+    profileId,
+    exp: Date.now() + 2 * 60 * 60 * 1000,
+  });
+  const url = new URL("/api/bootprofielen/export", request.url);
+  url.searchParams.set("token", token);
+  return url.toString();
 }
 
 async function linkedProfiles(admin: any, customerId: string) {
@@ -339,6 +393,28 @@ async function setLinkedIds(admin: any, customerId: string, ids: string[]) {
   }
 }
 
+async function setProfileCustomer(admin: any, profileId: string, customerId: string) {
+  const result = await admin.graphql(
+    `#graphql
+      mutation TransferBootprofiel($id: ID!, $metaobject: MetaobjectUpdateInput!) {
+        metaobjectUpdate(id: $id, metaobject: $metaobject) {
+          metaobject { id }
+          userErrors { field message code }
+        }
+      }
+    `,
+    {
+      variables: {
+        id: profileId,
+        metaobject: {fields: [{key: "klant_id", value: customerId}]},
+      },
+    },
+  );
+  const json: any = await result.json();
+  const errors = json.data?.metaobjectUpdate?.userErrors ?? json.errors ?? [];
+  if (errors.length) throw new Error(errors[0].message);
+}
+
 function cleanProfile(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("Ongeldige bootprofielgegevens");
@@ -374,7 +450,7 @@ export async function action({request}: ActionFunctionArgs) {
   if (request.method === "OPTIONS") return response({success: true});
 
   try {
-    const {admin, cors, customerId} = await context(request);
+    const {admin, cors, customerId, shopDomain} = await context(request);
     const profiles = await linkedProfiles(admin, customerId);
     const ownedIds = profiles.map((profile: any) => profile.id);
     const body = await request.json();
@@ -393,6 +469,137 @@ export async function action({request}: ActionFunctionArgs) {
             ? "Bootfoto opgeslagen"
             : "Bootfoto opgeslagen en wordt door WetterWinkel verwerkt in uw profiel.",
           profile: updated,
+        }));
+      }
+
+      if (body.intent === "create_export") {
+        const profileId = String(body.id ?? "");
+        if (!profiles.some((item: any) => item.id === profileId)) {
+          return cors(response({success: false, message: "Bootprofiel niet gevonden"}, 404));
+        }
+        return cors(response({
+          success: true,
+          message: "De PDF staat klaar.",
+          url: exportUrl(request, shopDomain, customerId, profileId),
+        }));
+      }
+
+      if (body.intent === "create_transfer") {
+        const profileId = String(body.id ?? "");
+        if (!profiles.some((item: any) => item.id === profileId)) {
+          return cors(response({success: false, message: "Bootprofiel niet gevonden"}, 404));
+        }
+
+        const code = transferCode();
+        const expiresAt = new Date(Date.now() + TRANSFER_DAYS * 24 * 60 * 60 * 1000);
+        await prisma.boatTransfer.upsert({
+          where: {shop_profileId: {shop: shopDomain, profileId}},
+          create: {
+            shop: shopDomain,
+            profileId,
+            fromCustomerId: customerId,
+            codeHash: transferCodeHash(shopDomain, code),
+            expiresAt,
+          },
+          update: {
+            fromCustomerId: customerId,
+            codeHash: transferCodeHash(shopDomain, code),
+            expiresAt,
+            createdAt: new Date(),
+          },
+        });
+        return cors(response({
+          success: true,
+          message: "Overdrachtscode aangemaakt. De boot blijft van u totdat de koper de code accepteert.",
+          code,
+          expiresAt: expiresAt.toISOString(),
+        }));
+      }
+
+      if (body.intent === "cancel_transfer") {
+        const profileId = String(body.id ?? "");
+        await prisma.boatTransfer.deleteMany({
+          where: {shop: shopDomain, profileId, fromCustomerId: customerId},
+        });
+        return cors(response({success: true, message: "De overdrachtscode is ingetrokken."}));
+      }
+
+      if (body.intent === "claim_transfer") {
+        const code = normalizedTransferCode(body.code);
+        if (!/^WW[A-Z2-9]{8}$/.test(code)) {
+          return cors(response({success: false, message: "Vul een geldige WetterWinkel-overdrachtscode in."}, 400));
+        }
+
+        const transfer = await prisma.boatTransfer.findUnique({
+          where: {codeHash: transferCodeHash(shopDomain, code)},
+        });
+        if (!transfer || transfer.shop !== shopDomain) {
+          return cors(response({success: false, message: "Deze overdrachtscode bestaat niet."}, 404));
+        }
+        if (transfer.expiresAt.getTime() <= Date.now()) {
+          await prisma.boatTransfer.delete({where: {id: transfer.id}});
+          return cors(response({success: false, message: "Deze overdrachtscode is verlopen."}, 410));
+        }
+        if (transfer.fromCustomerId === customerId) {
+          return cors(response({success: false, message: "U kunt uw eigen boot niet ontvangen."}, 400));
+        }
+
+        const sourceProfiles = await linkedProfiles(admin, transfer.fromCustomerId);
+        const sourceProfile = sourceProfiles.find((item: any) => item.id === transfer.profileId);
+        if (!sourceProfile) {
+          await prisma.boatTransfer.delete({where: {id: transfer.id}});
+          return cors(response({success: false, message: "Dit bootprofiel is niet meer overdraagbaar."}, 409));
+        }
+
+        const sourceIds = sourceProfiles.map((item: any) => item.id);
+        const targetIds = [...new Set([...ownedIds, transfer.profileId])];
+        const claimed = await prisma.boatTransfer.deleteMany({where: {id: transfer.id}});
+        if (claimed.count !== 1) {
+          return cors(response({success: false, message: "Deze overdrachtscode is al gebruikt."}, 409));
+        }
+
+        try {
+          await setProfileCustomer(admin, transfer.profileId, customerId);
+          await setLinkedIds(admin, customerId, targetIds);
+          await setLinkedIds(
+            admin,
+            transfer.fromCustomerId,
+            sourceIds.filter((id: string) => id !== transfer.profileId),
+          );
+        } catch (transferError) {
+          try {
+            await setProfileCustomer(admin, transfer.profileId, transfer.fromCustomerId);
+            await setLinkedIds(admin, transfer.fromCustomerId, sourceIds);
+            await setLinkedIds(admin, customerId, ownedIds);
+          } catch (rollbackError) {
+            console.error("Bootprofieloverdracht terugdraaien mislukt", rollbackError);
+          }
+          if (transfer.expiresAt.getTime() > Date.now()) {
+            try {
+              await prisma.boatTransfer.create({
+                data: {
+                  id: transfer.id,
+                  shop: transfer.shop,
+                  profileId: transfer.profileId,
+                  fromCustomerId: transfer.fromCustomerId,
+                  codeHash: transfer.codeHash,
+                  expiresAt: transfer.expiresAt,
+                  createdAt: transfer.createdAt,
+                },
+              });
+            } catch (restoreError) {
+              console.error("Overdrachtscode herstellen mislukt", restoreError);
+            }
+          }
+          throw transferError;
+        }
+
+        const updatedProfiles = await linkedProfiles(admin, customerId);
+        return cors(response({
+          success: true,
+          message: "Het bootprofiel is veilig aan uw klantaccount gekoppeld.",
+          profile: updatedProfiles.find((item: any) => item.id === transfer.profileId),
+          profiles: updatedProfiles,
         }));
       }
 
@@ -470,6 +677,9 @@ export async function action({request}: ActionFunctionArgs) {
     }
 
     if (request.method === "DELETE") {
+      await prisma.boatTransfer.deleteMany({
+        where: {shop: shopDomain, profileId, fromCustomerId: customerId},
+      });
       await setLinkedIds(admin, customerId, ownedIds.filter((id: string) => id !== profileId));
       const result = await admin.graphql(
         `#graphql

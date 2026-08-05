@@ -32,3 +32,16 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+model BoatTransfer {
+  id             String   @id @default(cuid())
+  shop           String
+  profileId      String
+  fromCustomerId String
+  codeHash       String   @unique
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  @@unique([shop, profileId])
+  @@index([expiresAt])
+}
