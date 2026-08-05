@@ -143,7 +143,7 @@ function Extension() {
           <Field label="Registratienummer" name="registratienummer" update={update} />
 
           <Select label="Boottype" name="boottype" update={update} options={[
-            'Motorjacht','Zeiljacht','Sloep','Tender','Consoleboot','Speedboot',
+            'Motorboot','Motorjacht','Zeiljacht','Sloep','Tender','Consoleboot','Speedboot',
             'Sportcruiser','Kajuitboot','Visboot','RIB','Kruiser','Trawler',
             'Kotter','Salonboot','Platbodem','Aak','Skûtsje','Vlet','Opduwer',
             'Houseboat / woonboot','Catamaran','Trimaran','Rubberboot','Anders',

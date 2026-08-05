@@ -1,358 +1,411 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useFetcher } from "react-router";
+import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+const METAOBJECT_TYPE = "$app:bootprofiel";
+const NEW_METAFIELD_NAMESPACE = "$app";
+const NEW_METAFIELD_KEY = "bootprofielen";
+const LEGACY_METAFIELD_NAMESPACE = "custom";
+const LEGACY_METAFIELD_KEY = "bootprofiel";
+const MIGRATION_BATCH_SIZE = 20;
 
-  return null;
+const LEGACY_PROFILE_TYPES: Record<
+  string,
+  { label: string; data: Record<string, string> }
+> = {
+  motorboot: {
+    label: "Motorboot",
+    data: { model_boot: "Motorboot", boottype: "Motorboot" },
+  },
+  sloep: {
+    label: "Sloep",
+    data: { model_boot: "Sloep", boottype: "Sloep" },
+  },
+  zeiljacht: {
+    label: "Zeiljacht",
+    data: { model_boot: "Zeiljacht", boottype: "Zeiljacht" },
+  },
+  motorjacht: {
+    label: "Motorjacht",
+    data: { model_boot: "Motorjacht", boottype: "Motorjacht" },
+  },
+  kajuitboot: {
+    label: "Kajuitboot",
+    data: { model_boot: "Kajuitboot", boottype: "Kajuitboot" },
+  },
+  visboot: {
+    label: "Visboot",
+    data: { model_boot: "Visboot", boottype: "Visboot" },
+  },
+  speedboot: {
+    label: "Speedboot",
+    data: { model_boot: "Speedboot", boottype: "Speedboot" },
+  },
+  "rib-rubberboot": {
+    label: "RIB / Rubberboot",
+    data: { model_boot: "RIB / Rubberboot", boottype: "RIB" },
+  },
+};
+
+type CustomerMigrationState = {
+  id: string;
+  name: string;
+  legacyHandle: string;
+  hasNewProfile: boolean;
+};
+
+type MigrationSummary = {
+  customers: number;
+  legacyProfiles: number;
+  migratedProfiles: number;
+  remainingProfiles: number;
+  unknownProfiles: number;
+};
+
+type AdminClient = {
+  graphql: (
+    query: string,
+    options?: { variables?: Record<string, unknown> },
+  ) => Promise<Response>;
+};
+
+type GraphQLJson<T> = {
+  data?: T;
+  errors?: Array<{ message: string }>;
+};
+
+type CustomersQueryData = {
+  customers: {
+    nodes: Array<{
+      id: string;
+      displayName?: string;
+      legacyProfile?: { reference?: { handle?: string } };
+      newProfiles?: {
+        references?: {
+          nodes?: Array<{ ownerCustomer?: { value?: string } }>;
+        };
+      };
+    }>;
+    pageInfo: { hasNextPage: boolean; endCursor?: string };
+  };
+};
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "onbekende fout";
+}
+
+function migrationSummary(
+  customers: CustomerMigrationState[],
+): MigrationSummary {
+  const legacy = customers.filter((customer) => customer.legacyHandle);
+  const migrated = legacy.filter((customer) => customer.hasNewProfile);
+  const remaining = legacy.filter(
+    (customer) =>
+      !customer.hasNewProfile && LEGACY_PROFILE_TYPES[customer.legacyHandle],
+  );
+  const unknown = legacy.filter(
+    (customer) =>
+      !customer.hasNewProfile && !LEGACY_PROFILE_TYPES[customer.legacyHandle],
+  );
+
+  return {
+    customers: customers.length,
+    legacyProfiles: legacy.length,
+    migratedProfiles: migrated.length,
+    remainingProfiles: remaining.length,
+    unknownProfiles: unknown.length,
+  };
+}
+
+async function graphQLJson<T>(
+  admin: AdminClient,
+  query: string,
+  variables: Record<string, unknown> = {},
+) {
+  const result = await admin.graphql(query, { variables });
+  const json = (await result.json()) as GraphQLJson<T>;
+  if (json.errors?.length) throw new Error(json.errors[0].message);
+  return json;
+}
+
+async function scanCustomers(
+  admin: AdminClient,
+): Promise<CustomerMigrationState[]> {
+  const customers: CustomerMigrationState[] = [];
+  let after: string | null = null;
+  let hasNextPage = true;
+
+  while (hasNextPage) {
+    const json: GraphQLJson<CustomersQueryData> =
+      await graphQLJson<CustomersQueryData>(
+        admin,
+        `#graphql
+        query BootprofielMigratieKlanten($after: String) {
+          customers(first: 100, after: $after, sortKey: ID) {
+            nodes {
+              id
+              displayName
+              legacyProfile: metafield(
+                namespace: "${LEGACY_METAFIELD_NAMESPACE}"
+                key: "${LEGACY_METAFIELD_KEY}"
+              ) {
+                reference {
+                  ... on Metaobject { handle }
+                }
+              }
+              newProfiles: metafield(
+                namespace: "${NEW_METAFIELD_NAMESPACE}"
+                key: "${NEW_METAFIELD_KEY}"
+              ) {
+                references(first: 100) {
+                  nodes {
+                    ... on Metaobject {
+                      ownerCustomer: field(key: "klant_id") { value }
+                    }
+                  }
+                }
+              }
+            }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      `,
+        { after },
+      );
+
+    const connection: CustomersQueryData["customers"] | undefined =
+      json.data?.customers;
+    for (const customer of connection?.nodes ?? []) {
+      customers.push({
+        id: customer.id,
+        name: customer.displayName || "Onbekende klant",
+        legacyHandle: customer.legacyProfile?.reference?.handle || "",
+        hasNewProfile: Boolean(
+          customer.newProfiles?.references?.nodes?.some(
+            (profile) => profile.ownerCustomer?.value === customer.id,
+          ),
+        ),
+      });
+    }
+
+    hasNextPage = Boolean(connection?.pageInfo?.hasNextPage);
+    after = connection?.pageInfo?.endCursor ?? null;
+  }
+
+  return customers;
+}
+
+function migrationHandle(customerId: string) {
+  const numericId = customerId.split("/").pop();
+  if (!numericId || !/^\d+$/.test(numericId)) {
+    throw new Error("Ongeldig Shopify klant-ID");
+  }
+  return `migratie-klant-${numericId}`;
+}
+
+async function upsertProfile(
+  admin: AdminClient,
+  customer: CustomerMigrationState,
+) {
+  const profileType = LEGACY_PROFILE_TYPES[customer.legacyHandle];
+  if (!profileType) throw new Error("Onbekend oud boottype");
+
+  const json = await graphQLJson<{
+    metaobjectUpsert?: {
+      metaobject?: { id: string };
+      userErrors?: Array<{ message: string }>;
+    };
+  }>(
+    admin,
+    `#graphql
+      mutation MigreerBootprofiel(
+        $handle: MetaobjectHandleInput!
+        $metaobject: MetaobjectUpsertInput!
+      ) {
+        metaobjectUpsert(handle: $handle, metaobject: $metaobject) {
+          metaobject { id }
+          userErrors { field message code }
+        }
+      }
+    `,
+    {
+      handle: {
+        type: METAOBJECT_TYPE,
+        handle: migrationHandle(customer.id),
+      },
+      metaobject: {
+        fields: [
+          { key: "naam", value: profileType.label },
+          { key: "data", value: JSON.stringify(profileType.data) },
+          { key: "klant_id", value: customer.id },
+        ],
+      },
+    },
+  );
+
+  const payload = json.data?.metaobjectUpsert;
+  if (payload?.userErrors?.length || !payload?.metaobject?.id) {
+    throw new Error(payload?.userErrors?.[0]?.message || "Aanmaken mislukt");
+  }
+  return payload.metaobject.id as string;
+}
+
+async function linkProfiles(
+  admin: AdminClient,
+  profiles: Array<{ customerId: string; profileId: string }>,
+) {
+  if (!profiles.length) return;
+  const json = await graphQLJson<{
+    metafieldsSet?: { userErrors?: Array<{ message: string }> };
+  }>(
+    admin,
+    `#graphql
+      mutation KoppelGemigreerdeBootprofielen(
+        $metafields: [MetafieldsSetInput!]!
+      ) {
+        metafieldsSet(metafields: $metafields) {
+          userErrors { field message code }
+        }
+      }
+    `,
+    {
+      metafields: profiles.map(({ customerId, profileId }) => ({
+        ownerId: customerId,
+        namespace: NEW_METAFIELD_NAMESPACE,
+        key: NEW_METAFIELD_KEY,
+        type: "list.metaobject_reference",
+        value: JSON.stringify([profileId]),
+      })),
+    },
+  );
+  const errors = json.data?.metafieldsSet?.userErrors ?? [];
+  if (errors.length) throw new Error(errors[0].message);
+}
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const { admin } = await authenticate.admin(request);
+  const customers = await scanCustomers(admin);
+  return { summary: migrationSummary(customers) };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
-  const color = ["Red", "Orange", "Yellow", "Green"][
-    Math.floor(Math.random() * 4)
-  ];
-  const response = await admin.graphql(
-    `#graphql
-      mutation populateProduct($product: ProductCreateInput!) {
-        productCreate(product: $product) {
-          product {
-            id
-            title
-            handle
-            status
-            variants(first: 10) {
-              edges {
-                node {
-                  id
-                  price
-                  barcode
-                  createdAt
-                }
-              }
-            }
-            demoInfo: metafield(namespace: "$app", key: "demo_info") {
-              jsonValue
-            }
-          }
-        }
-      }`,
-    {
-      variables: {
-        product: {
-          title: `${color} Snowboard`,
-          metafields: [
-            {
-              namespace: "$app",
-              key: "demo_info",
-              value: "Created by React Router Template",
-            },
-          ],
-        },
-      },
-    },
-  );
-  const responseJson = await response.json();
+  const form = await request.formData();
+  if (form.get("intent") !== "migrate") {
+    return { success: false, message: "Onbekende actie", migrated: 0 };
+  }
 
-  const product = responseJson.data!.productCreate!.product!;
-  const variantId = product.variants.edges[0]!.node!.id!;
+  const customers = await scanCustomers(admin);
+  const targets = customers
+    .filter(
+      (customer) =>
+        customer.legacyHandle &&
+        !customer.hasNewProfile &&
+        LEGACY_PROFILE_TYPES[customer.legacyHandle],
+    )
+    .slice(0, MIGRATION_BATCH_SIZE);
 
-  const variantResponse = await admin.graphql(
-    `#graphql
-    mutation shopifyReactRouterTemplateUpdateVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-      productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-        productVariants {
-          id
-          price
-          barcode
-          createdAt
-        }
-      }
-    }`,
-    {
-      variables: {
-        productId: product.id,
-        variants: [{ id: variantId, price: "100.00" }],
-      },
-    },
-  );
+  const created: Array<{ customerId: string; profileId: string }> = [];
+  const failures: string[] = [];
 
-  const variantResponseJson = await variantResponse.json();
+  for (const customer of targets) {
+    try {
+      created.push({
+        customerId: customer.id,
+        profileId: await upsertProfile(admin, customer),
+      });
+    } catch (error: unknown) {
+      failures.push(`${customer.name}: ${errorMessage(error)}`);
+    }
+  }
 
-  const metaobjectResponse = await admin.graphql(
-    `#graphql
-    mutation shopifyReactRouterTemplateUpsertMetaobject($handle: MetaobjectHandleInput!, $metaobject: MetaobjectUpsertInput!) {
-      metaobjectUpsert(handle: $handle, metaobject: $metaobject) {
-        metaobject {
-          id
-          handle
-          title: field(key: "title") {
-            jsonValue
-          }
-          description: field(key: "description") {
-            jsonValue
-          }
-        }
-        userErrors {
-          field
-          message
-        }
-      }
-    }`,
-    {
-      variables: {
-        handle: {
-          type: "$app:example",
-          handle: "demo-entry",
-        },
-        metaobject: {
-          fields: [
-            { key: "title", value: "Demo Entry" },
-            {
-              key: "description",
-              value:
-                "This metaobject was created by the Shopify app template to demonstrate the metaobject API.",
-            },
-          ],
-        },
-      },
-    },
-  );
-
-  const metaobjectResponseJson = await metaobjectResponse.json();
+  try {
+    await linkProfiles(admin, created);
+  } catch (error: unknown) {
+    return {
+      success: false,
+      migrated: 0,
+      message: `De profielen zijn veilig aangemaakt maar nog niet gekoppeld: ${errorMessage(
+        error,
+      )}. Druk opnieuw op de knop om het te herstellen.`,
+    };
+  }
 
   return {
-    product: responseJson!.data!.productCreate!.product,
-    variant:
-      variantResponseJson!.data!.productVariantsBulkUpdate!.productVariants,
-    metaobject:
-      metaobjectResponseJson!.data!.metaobjectUpsert!.metaobject,
+    success: failures.length === 0,
+    migrated: created.length,
+    message: failures.length
+      ? `${created.length} klanten overgezet. ${failures.length} klanten konden nog niet worden overgezet.`
+      : `${created.length} klanten veilig overgezet.`,
   };
 };
 
 export default function Index() {
+  const { summary } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-
+  const revalidator = useRevalidator();
   const shopify = useAppBridge();
-  const isLoading =
-    ["loading", "submitting"].includes(fetcher.state) &&
-    fetcher.formMethod === "POST";
+  const handledMessage = useRef("");
+  const isMigrating = fetcher.state !== "idle";
 
   useEffect(() => {
-    if (fetcher.data?.product?.id) {
-      shopify.toast.show("Product created");
+    const message = fetcher.data?.message || "";
+    if (
+      fetcher.state === "idle" &&
+      fetcher.data?.migrated &&
+      message !== handledMessage.current
+    ) {
+      handledMessage.current = message;
+      revalidator.revalidate();
+      shopify.toast.show(message);
     }
-  }, [fetcher.data?.product?.id, shopify]);
+  }, [fetcher.data, fetcher.state, revalidator, shopify]);
 
-  const generateProduct = () => fetcher.submit({}, { method: "POST" });
+  const migrate = () =>
+    fetcher.submit({ intent: "migrate" }, { method: "POST" });
 
   return (
-    <s-page heading="Shopify app template">
-      <s-button slot="primary-action" onClick={generateProduct}>
-        Generate a product
-      </s-button>
-
-      <s-section heading="Congrats on creating a new Shopify app 🎉">
-        <s-paragraph>
-          This embedded app template uses{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/tools/app-bridge"
-            target="_blank"
-          >
-            App Bridge
-          </s-link>{" "}
-          interface examples like an{" "}
-          <s-link href="/app/additional">additional page in the app nav</s-link>
-          , as well as an{" "}
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            Admin GraphQL
-          </s-link>{" "}
-          mutation demo, to provide a starting point for app development.
-        </s-paragraph>
-      </s-section>
-      <s-section heading="Get started with products">
-        <s-paragraph>
-          Generate a product with GraphQL and get the JSON output for that
-          product. Learn more about the{" "}
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql/latest/mutations/productCreate"
-            target="_blank"
-          >
-            productCreate
-          </s-link>{" "}
-          mutation in our API references. Includes a product{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/build/custom-data/metafields"
-            target="_blank"
-          >
-            metafield
-          </s-link>{" "}
-          and{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/build/custom-data/metaobjects"
-            target="_blank"
-          >
-            metaobject
-          </s-link>
-          .
-        </s-paragraph>
-        <s-stack direction="inline" gap="base">
-          <s-button
-            onClick={generateProduct}
-            {...(isLoading ? { loading: true } : {})}
-          >
-            Generate a product
-          </s-button>
-          {fetcher.data?.product && (
-            <s-button
-              onClick={() => {
-                shopify.intents.invoke?.("edit:shopify/Product", {
-                  value: fetcher.data?.product?.id,
-                });
-              }}
-              target="_blank"
-              variant="tertiary"
-            >
-              Edit product
-            </s-button>
+    <s-page heading="Bootprofielenbeheer">
+      <s-section heading="Veilige klantmigratie">
+        <s-stack direction="block" gap="base">
+          <s-paragraph>
+            Ieder bootprofiel wordt aan precies één Shopify-klant-ID gekoppeld.
+            Klanten kunnen uitsluitend hun eigen profiel ophalen, wijzigen en
+            verwijderen.
+          </s-paragraph>
+          <s-text>Klanten gecontroleerd: {summary.customers}</s-text>
+          <s-text>Oude bootkeuze gevonden: {summary.legacyProfiles}</s-text>
+          <s-text>Al overgezet: {summary.migratedProfiles}</s-text>
+          <s-text>Nog over te zetten: {summary.remainingProfiles}</s-text>
+          {summary.unknownProfiles > 0 && (
+            <s-text>Handmatig controleren: {summary.unknownProfiles}</s-text>
           )}
+          {summary.remainingProfiles > 0 ? (
+            <s-button onClick={migrate} disabled={isMigrating}>
+              {isMigrating
+                ? "Veilig overzetten..."
+                : `Volgende ${Math.min(MIGRATION_BATCH_SIZE, summary.remainingProfiles)} klanten overzetten`}
+            </s-button>
+          ) : (
+            <s-text>Alle bekende oude bootkeuzes zijn overgezet.</s-text>
+          )}
+          {fetcher.data?.message && <s-text>{fetcher.data.message}</s-text>}
         </s-stack>
-        {fetcher.data?.product && (
-          <s-section heading="productCreate mutation">
-            <s-stack direction="block" gap="base">
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  <code>{JSON.stringify(fetcher.data.product, null, 2)}</code>
-                </pre>
-              </s-box>
-
-              <s-heading>productVariantsBulkUpdate mutation</s-heading>
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  <code>{JSON.stringify(fetcher.data.variant, null, 2)}</code>
-                </pre>
-              </s-box>
-
-              <s-heading>metaobjectUpsert mutation</s-heading>
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  <code>
-                    {JSON.stringify(fetcher.data.metaobject, null, 2)}
-                  </code>
-                </pre>
-              </s-box>
-            </s-stack>
-          </s-section>
-        )}
       </s-section>
 
-      <s-section slot="aside" heading="App template specs">
+      <s-section heading="Wat wordt overgezet?">
         <s-paragraph>
-          <s-text>Framework: </s-text>
-          <s-link href="https://reactrouter.com/" target="_blank">
-            React Router
-          </s-link>
+          Alleen het oude algemene boottype wordt als startprofiel ingevuld.
+          Bestaande nieuwe profielen worden overgeslagen. De oude velden blijven
+          voorlopig bestaan als controle en worden niet verwijderd.
         </s-paragraph>
-        <s-paragraph>
-          <s-text>Interface: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/api/app-home/using-polaris-components"
-            target="_blank"
-          >
-            Polaris web components
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>API: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            GraphQL
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Custom data: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/apps/build/custom-data"
-            target="_blank"
-          >
-            Metafields &amp; metaobjects
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Database: </s-text>
-          <s-link href="https://www.prisma.io/" target="_blank">
-            Prisma
-          </s-link>
-        </s-paragraph>
-      </s-section>
-
-      <s-section slot="aside" heading="Next steps">
-        <s-unordered-list>
-          <s-list-item>
-            Build an{" "}
-            <s-link
-              href="https://shopify.dev/docs/apps/getting-started/build-app-example"
-              target="_blank"
-            >
-              example app
-            </s-link>
-          </s-list-item>
-          <s-list-item>
-            Explore Shopify&apos;s API with{" "}
-            <s-link
-              href="https://shopify.dev/docs/apps/tools/graphiql-admin-api"
-              target="_blank"
-            >
-              GraphiQL
-            </s-link>
-          </s-list-item>
-        </s-unordered-list>
       </s-section>
     </s-page>
   );

@@ -70,7 +70,7 @@ async function linkedProfiles(admin: any, customerId: string) {
   const json: any = await result.json();
   if (json.errors?.length) throw new Error(json.errors[0].message);
 
-  return (json.data?.customer?.metafield?.references?.nodes ?? []).map(
+  const profiles = (json.data?.customer?.metafield?.references?.nodes ?? []).map(
     (node: any) => {
       const fields = Object.fromEntries(
         (node.fields ?? []).map((field: any) => [field.key, field.value]),
@@ -81,9 +81,24 @@ async function linkedProfiles(admin: any, customerId: string) {
       } catch {
         data = {};
       }
-      return {id: node.id, handle: node.handle, updatedAt: node.updatedAt, data};
+      return {
+        id: node.id,
+        handle: node.handle,
+        updatedAt: node.updatedAt,
+        data,
+        customerId: fields.klant_id,
+      };
     },
   );
+
+  return profiles
+    .filter((profile: any) => profile.customerId === customerId)
+    .map((profile: any) => ({
+      id: profile.id,
+      handle: profile.handle,
+      updatedAt: profile.updatedAt,
+      data: profile.data,
+    }));
 }
 
 async function setLinkedIds(admin: any, customerId: string, ids: string[]) {
