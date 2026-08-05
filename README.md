@@ -21,6 +21,20 @@ Na het samenvoegen van deze code zijn beide deployments nodig:
 3. Voeg in de Shopify thema-editor op de homepage het appblok **WetterWinkel Bootmarkt** toe.
 4. Open **Apps → Bootprofielen → Bootmarkt** om betaalde advertenties goed te keuren.
 
+### E-mailmeldingen bij reacties
+
+Reacties worden altijd eerst aan de juiste advertentie en klant in de database gekoppeld. Daarna verstuurt de app via Resend:
+
+- een e-mail naar de verkoper met de reactie en een link naar het klantprofiel;
+- een bevestigingsmail naar de geïnteresseerde met een link naar de advertentie.
+
+Verifieer `wetterwinkel.nl` in Resend en voeg in Render toe:
+
+- `RESEND_API_KEY`: de geheime Resend API-sleutel;
+- `MARKETPLACE_EMAIL_FROM`: bijvoorbeeld `WetterWinkel Bootmarkt <bootmarkt@wetterwinkel.nl>`.
+
+Zonder geldige Resend-configuratie blijft de reactie veilig opgeslagen, maar toont de website dat de e-mailmelding niet kon worden verzonden.
+
 De route `/apps/bootmarkt/voorwaarden` bevat een technisch concept van de advertentievoorwaarden. Laat voorwaarden, privacy, DSA-procedure en fiscale positie vóór openbare livegang controleren.
 
 This is a template for building a [Shopify app](https://shopify.dev/docs/apps/getting-started) using [React Router](https://reactrouter.com/). It was forked from the [Shopify Remix app template](https://github.com/Shopify/shopify-app-template-remix) and converted to React Router.

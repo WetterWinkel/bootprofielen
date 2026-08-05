@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {ActionFunctionArgs, LoaderFunctionArgs} from "react-router";
 import {expireListings, html, nl2br, publicListing} from "../lib/boat-marketplace.server";
+import {sendMarketplaceInquiryEmails} from "../lib/marketplace-email.server";
 import prisma from "../db.server";
-import {authenticate} from "../shopify.server";
+import {authenticate, unauthenticated} from "../shopify.server";
 
 const labels: Record<string, string> = {
   naam_schip: "Naam schip", merk_boot: "Merk", model_boot: "Model", bouwjaar_boot: "Bouwjaar",
@@ -72,7 +73,9 @@ export async function loader({request, params}: LoaderFunctionArgs) {
           <div class="ww-notice">WetterWinkel biedt alleen advertentieruimte en is geen partij bij de verkoop. Laat de boot, identiteit, eigendom, btw-status en documenten altijd zelf controleren. Bij een Kadaster-teboekgestelde boot is voor de juridische overdracht een notariële akte nodig.</div>
         </div>
         <div class="ww-panel ww-section">
-          <h2>Contact met de verkoper</h2>${sent === "contact" ? `<div class="ww-success">Uw bericht is veilig opgeslagen voor de verkoper.</div>` : ""}
+          <h2>Contact met de verkoper</h2>
+          ${sent === "contact-email" ? `<div class="ww-success">Uw bericht is geplaatst in het WetterWinkel-portaal van de verkoper. U ontvangt een bevestiging per e-mail.</div>` : ""}
+          ${sent === "contact-stored" || sent === "contact" ? `<div class="ww-success">Uw bericht is veilig opgeslagen in het WetterWinkel-portaal van de verkoper. De e-mailmelding kon niet worden verstuurd.</div>` : ""}
           <form class="ww-form" method="post" action="/apps/bootmarkt/${html(item.slug)}">
             <input type="hidden" name="intent" value="contact"><label>Naam<input required name="name" maxlength="100"></label><label>E-mailadres<input required type="email" name="email" maxlength="160"></label><label>Telefoonnummer (optioneel)<input name="phone" maxlength="40"></label><label>Bericht<textarea required name="message" maxlength="3000"></textarea></label><button type="submit">Bericht versturen</button>
           </form>
@@ -106,8 +109,16 @@ export async function action({request, params}: ActionFunctionArgs) {
     if (message.length < 10) return new Response("Vul een duidelijk bericht in", {status: 400});
     const recent = await prisma.boatListingInquiry.count({where: {listingId: listing.id, email, createdAt: {gte: since}}});
     if (recent >= 3) return new Response("U hebt recent al meerdere berichten gestuurd", {status: 429});
-    await prisma.boatListingInquiry.create({data: {listingId: listing.id, name, email, phone: field(form, "phone", 40) || null, message}});
-    return new Response(null, {status: 303, headers: {Location: `/apps/bootmarkt/${slug}?sent=contact`}});
+    const inquiry = await prisma.boatListingInquiry.create({data: {listingId: listing.id, name, email, phone: field(form, "phone", 40) || null, message}});
+    let emailSent = false;
+    try {
+      const {admin} = await unauthenticated.admin(shop);
+      const result = await sendMarketplaceInquiryEmails(admin, listing, inquiry);
+      emailSent = result.sellerSent && result.interestedPartySent;
+    } catch (error) {
+      console.error("Bootmarktreactie e-mailen mislukt", error);
+    }
+    return new Response(null, {status: 303, headers: {Location: `/apps/bootmarkt/${slug}?sent=${emailSent ? "contact-email" : "contact-stored"}`}});
   }
 
   if (intent === "report") {

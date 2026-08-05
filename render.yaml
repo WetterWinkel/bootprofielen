@@ -20,6 +20,10 @@ services:
         sync: false
       - key: PUBLIC_STORE_URL
         value: https://www.wetterwinkel.nl
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MARKETPLACE_EMAIL_FROM
+        value: WetterWinkel Bootmarkt <bootmarkt@wetterwinkel.nl>
       - key: SCOPES
         value: read_customers,write_customers,read_metaobjects,write_metaobjects,read_metaobject_definitions,write_metaobject_definitions,read_files,write_files,read_orders,write_draft_orders,write_app_proxy
 
