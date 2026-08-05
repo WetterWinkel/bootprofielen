@@ -32,6 +32,113 @@ type CaptainInput = {
   messages: Array<{ role: "USER" | "ASSISTANT"; content: string }>;
 };
 
+type ProductOpportunity = {
+  queries: string[];
+  matched: boolean;
+};
+
+const PRODUCT_SEARCH_GROUPS: Array<{
+  pattern: RegExp;
+  queries: string[];
+}> = [
+  {
+    pattern: /\b(motorolie|olie|sae|viscositeit|smeerolie|oliewissel)\b/i,
+    queries: ["motorolie", "dieselmotorolie", "SAE 30", "marine engine oil"],
+  },
+  {
+    pattern: /\b(fender|fenders|stootwil|stootwillen|stootkussen|stootkussens)\b/i,
+    queries: ["fender", "stootwil", "stootkussen"],
+  },
+  {
+    pattern: /\b(landvast|landvasten|aanmeerlijn|aanmeerlijnen|meertouw|meertouwen|touw|touwen)\b/i,
+    queries: ["landvast", "aanmeerlijn", "meertouw"],
+  },
+  {
+    pattern: /\b(omvormer|omvormers|inverter|inverters)\b/i,
+    queries: ["omvormer", "inverter"],
+  },
+  {
+    pattern: /\b(impeller|impellers|waterpompwaaier)\b/i,
+    queries: ["impeller", "waterpomp impeller"],
+  },
+  {
+    pattern: /\b(anode|anodes|zinkanode|aluminiumanode)\b/i,
+    queries: ["anode", "zinkanode", "aluminiumanode"],
+  },
+  {
+    pattern: /\b(oliefilter|brandstoffilter|dieselfilter|waterafscheider|filter|filters)\b/i,
+    queries: ["oliefilter", "brandstoffilter", "waterafscheider"],
+  },
+  {
+    pattern: /\b(koelvloeistof|antivries|antifreeze)\b/i,
+    queries: ["koelvloeistof", "antivries boot"],
+  },
+  {
+    pattern: /\b(accu|accus|accu's|acculader|druppellader|boordaccu|startaccu)\b/i,
+    queries: ["boot accu", "acculader", "druppellader"],
+  },
+  {
+    pattern: /\b(reddingsvest|reddingsvesten|zwemvest|zwemvesten)\b/i,
+    queries: ["reddingsvest", "zwemvest"],
+  },
+  {
+    pattern: /\b(anker|ankers|ankerlijn|ankerketting)\b/i,
+    queries: ["anker", "ankerlijn", "ankerketting"],
+  },
+  {
+    pattern: /\b(bilgepomp|lenswaterpomp|drinkwaterpomp|toiletpomp|pomp)\b/i,
+    queries: ["bilgepomp", "lenswaterpomp", "boot pomp"],
+  },
+  {
+    pattern: /\b(antifouling|rompreiniger|bootreiniger|teakreiniger|poetsmiddel)\b/i,
+    queries: ["antifouling", "bootreiniger", "poetsmiddel boot"],
+  },
+];
+
+function latestCustomerQuestion(input: CaptainInput) {
+  return (
+    [...input.messages]
+      .reverse()
+      .find((message) => message.role === "USER")?.content || ""
+  );
+}
+
+function productOpportunity(input: CaptainInput): ProductOpportunity {
+  const question = latestCustomerQuestion(input);
+  const queries = PRODUCT_SEARCH_GROUPS.flatMap((group) =>
+    group.pattern.test(question) ? group.queries : [],
+  );
+  return {
+    matched: queries.length > 0,
+    queries: [...new Set(queries)].slice(0, 8),
+  };
+}
+
+function mergeProductSearchResults(
+  resultSets: CaptainProduct[][],
+  maxProducts = 24,
+) {
+  const merged: CaptainProduct[] = [];
+  const seen = new Set<string>();
+  const longest = Math.max(0, ...resultSets.map((products) => products.length));
+
+  for (let index = 0; index < longest; index += 1) {
+    for (const products of resultSets) {
+      const product = products[index];
+      if (!product || seen.has(product.id)) continue;
+      seen.add(product.id);
+      merged.push(product);
+      if (merged.length >= maxProducts) return merged;
+    }
+  }
+  return merged;
+}
+
+function fallbackProductSelection(products: CaptainProduct[]) {
+  const available = products.filter((product) => product.available);
+  return (available.length ? available : products).slice(0, 4);
+}
+
 function openAIClient() {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
@@ -110,7 +217,11 @@ async function searchWetterWinkelProducts(admin: any, rawQuery: unknown) {
   );
 }
 
-function instructions(input: CaptainInput) {
+function instructions(
+  input: CaptainInput,
+  prefetchedProducts: CaptainProduct[],
+  opportunity: ProductOpportunity,
+) {
   return `Je bent Captain AI, de persoonlijke Nederlandstalige vaar- en onderhoudsassistent van WetterWinkel.
 
 PRIVECONTEXT
@@ -135,6 +246,13 @@ WERKWIJZE EN BRONNEN
 - Verzin nooit onderhoudsintervallen, belastingwaarden, kabeldiktes, zekeringen, vloeistoffen, onderdeelnummers of veiligheidsclaims.
 - Bij gas, 230V, accubanken, brandstof, hijsen, rompdoorvoeren en andere veiligheidskritische werkzaamheden: geef veilige algemene informatie en adviseer controle door een vakbedrijf wanneer gegevens of expertise ontbreken.
 
+MOTOR EN DIGITAAL SERVICEBOEK — BIJ IEDERE MOTOR
+- Behandel iedere motorvraag zoals een persoonlijk digitaal motorserviceboek, ongeacht merk of type. Combineer altijd het bootprofiel, de motorvelden en relevante regels uit het Digitaal serviceboek.
+- Benoem het gebruikte motormerk en exacte type. Controleer bij technisch advies waar mogelijk een officiële fabrikant- of werkplaatshandleiding voor precies die motorvariant; gebruik een handleiding van een vergelijkbare motor nooit stilzwijgend alsof die exact past.
+- Vergelijk de huidige motoruren met de laatst geregistreerde beurt en met "volgende beurt (uren/datum)" uit het serviceboek. Meld concreet wat volgens de aanwezige registratie aanstaande of achterstallig lijkt. Verzin geen ontbrekende onderhoudshistorie.
+- Controleer bij olie en vloeistoffen de voorgeschreven viscositeit/spec-specificatie, hoeveelheid en het verschil tussen motor, keerkoppeling en andere systemen. Noem alleen waarden die bij de exacte motorvariant zijn onderbouwd.
+- Ontbreken motortype, actuele motoruren of een betrouwbare handleiding, stel dan één gerichte vraag of geef duidelijk aan welke controle nog nodig is. Adviseer de klant om uitgevoerd onderhoud daarna als nieuwe regel in het Digitaal serviceboek vast te leggen.
+
 PRODUCTBELEID — ABSOLUUT
 - Je mag overal informatie zoeken, maar je mag uitsluitend concrete koop- of productaanbevelingen doen voor actieve producten die door search_wetterwinkel_products zijn teruggegeven.
 - Zoek met korte Nederlandse cataloguswoorden. Zoek opnieuw met een synoniem als niets wordt gevonden.
@@ -142,6 +260,24 @@ PRODUCTBELEID — ABSOLUUT
 - Noem geen concurrerende winkel, externe verkooplink of extern koopproduct. Een fabrikant of producttype als technische bron mag wel, maar niet als koopadvies.
 - Is er geen geschikt WetterWinkel-product, zeg dan letterlijk dat je in het huidige WetterWinkel-assortiment geen passend product kunt aanbevelen. Geef eventueel neutrale selectiecriteria, zonder externe verkooptip.
 - Controleer pasvorm en specificaties tegen de bootgegevens; doe geen stellige compatibiliteitsclaim als informatie ontbreekt.
+- Zodra de vraag een productkans bevat (zoals olie, filters, impellers, anodes, fenders, landvasten, accu's of omvormers), moet je vóór je eindantwoord WetterWinkel-producten zoeken. Zijn passende kandidaten aanwezig, selecteer dan minimaal één en maximaal vier met select_wetterwinkel_products zodat ze direct als klikbare WetterWinkel-productkaarten verschijnen.
+- Geef eerst het technisch juiste advies en toon daarna de passende WetterWinkel-producten. Een productkaart is een aanvulling op, nooit een vervanging van, de technische onderbouwing.
+
+AUTOMATISCH VOORGEZOCHTE WETTERWINKEL-PRODUCTEN
+Productkans herkend: ${opportunity.matched ? "ja" : "nee"}
+Gebruikte cataloguszoektermen: ${compact(opportunity.queries)}
+${compact(
+  prefetchedProducts.map((product) => ({
+    id: product.id,
+    title: product.title,
+    vendor: product.vendor,
+    productType: product.productType,
+    description: product.description,
+    available: product.available,
+  })),
+  6_000,
+)}
+Als deze lijst passende producten bevat, gebruik select_wetterwinkel_products met de exacte ID's. Als niets exact past, zoek zelf nog één keer met een korter synoniem; verzin geen match.
 
 ANTWOORDSTIJL
 Antwoord helder, praktisch en niet langer dan nodig. Gebruik metrische eenheden. Sluit waar nuttig af met één concrete vervolgvraag. Zeg niet dat je een menselijke monteur of gecertificeerd expert bent.`;
@@ -182,6 +318,24 @@ export async function answerCaptainQuestion(input: CaptainInput) {
     .filter(Boolean);
   const productCandidates = new Map<string, CaptainProduct>();
   let selectedProducts: CaptainProduct[] = [];
+  const opportunity = productOpportunity(input);
+  const prefetchedResultSets = await Promise.all(
+    opportunity.queries.map(async (query) => {
+      try {
+        return await searchWetterWinkelProducts(input.admin, query);
+      } catch (error) {
+        console.error("Captain AI productvoorzoekactie mislukt", {
+          query,
+          error,
+        });
+        return [];
+      }
+    }),
+  );
+  const prefetchedProducts = mergeProductSearchResults(prefetchedResultSets);
+  for (const product of prefetchedProducts) {
+    productCandidates.set(product.id, product);
+  }
 
   const tools: any[] = [
     {
@@ -245,7 +399,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
   const createResponse = () =>
     client.responses.create({
       model,
-      instructions: instructions(input),
+      instructions: instructions(input, prefetchedProducts, opportunity),
       input: responseInput as any,
       tools,
       store: false,
@@ -279,10 +433,15 @@ export async function answerCaptainQuestion(input: CaptainInput) {
       }
 
       if (call.name === "search_wetterwinkel_products") {
-        const products = await searchWetterWinkelProducts(
-          input.admin,
-          args.query,
-        );
+        let products: CaptainProduct[] = [];
+        try {
+          products = await searchWetterWinkelProducts(input.admin, args.query);
+        } catch (error) {
+          console.error("Captain AI productzoekactie mislukt", {
+            query: args.query,
+            error,
+          });
+        }
         for (const product of products)
           productCandidates.set(product.id, product);
         outputs.push({
@@ -325,6 +484,10 @@ export async function answerCaptainQuestion(input: CaptainInput) {
     throw new Error(
       "Captain AI kon nog geen antwoord maken. Probeer de vraag anders te formuleren.",
     );
+
+  if (!selectedProducts.length && opportunity.matched) {
+    selectedProducts = fallbackProductSelection(prefetchedProducts);
+  }
 
   return {
     text,
