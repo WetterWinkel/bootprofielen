@@ -391,7 +391,7 @@ export async function action({request}: ActionFunctionArgs) {
           success: true,
           message: updated.photoUrl
             ? "Bootfoto opgeslagen"
-            : "Bootfoto opgeslagen en wordt door Shopify verwerkt",
+            : "Bootfoto opgeslagen en wordt door WetterWinkel verwerkt in uw profiel.",
           profile: updated,
         }));
       }
