@@ -1,7 +1,7 @@
 import '@shopify/ui-extensions/preact';
 import {createContext, render} from 'preact';
 import {useContext, useEffect, useState} from 'preact/hooks';
-import {BoatMarketplace} from './BoatMarketplace';
+import {BoatMarketplace} from './BoatMarketplace.jsx';
 
 const API_URL =
   'https://bootprofielen.onrender.com/api/bootprofielen';
