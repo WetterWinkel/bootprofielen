@@ -1,0 +1,35 @@
+<section
+  class="ww-bootmarkt-home"
+  data-ww-bootmarkt
+  data-feed="/apps/bootmarkt/feed?limit={{ block.settings.aantal }}"
+>
+  <div class="ww-bootmarkt-home__header">
+    <div>
+      <p class="ww-bootmarkt-home__eyebrow">{{ block.settings.label | escape }}</p>
+      <h2>{{ block.settings.titel | escape }}</h2>
+      {% if block.settings.tekst != blank %}
+        <p>{{ block.settings.tekst | escape }}</p>
+      {% endif %}
+    </div>
+    <a class="ww-bootmarkt-home__all" href="/apps/bootmarkt">{{ block.settings.knop | escape }}</a>
+  </div>
+  <div class="ww-bootmarkt-home__grid" data-ww-bootmarkt-grid>
+    <p class="ww-bootmarkt-home__loading">Advertenties laden…</p>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "WetterWinkel Bootmarkt",
+  "target": "section",
+  "stylesheet": "bootmarkt-home.css",
+  "javascript": "bootmarkt-home.js",
+  "settings": [
+    {"type": "text", "id": "label", "label": "Bovenregel", "default": "Nieuw bij WetterWinkel"},
+    {"type": "text", "id": "titel", "label": "Titel", "default": "Boten te koop"},
+    {"type": "text", "id": "tekst", "label": "Tekst", "default": "Ontdek boten van watersporters met een WetterWinkel-bootprofiel."},
+    {"type": "range", "id": "aantal", "label": "Aantal advertenties", "min": 3, "max": 12, "step": 1, "default": 6},
+    {"type": "text", "id": "knop", "label": "Knoptekst", "default": "Alle boten bekijken"}
+  ]
+}
+{% endschema %}

@@ -1,0 +1,15 @@
+.ww-bootmarkt-home{max-width:1280px;margin:48px auto;padding:34px 24px;border-radius:24px;background:linear-gradient(135deg,#eef8ff,#f8fcff);color:#123454;box-sizing:border-box}
+.ww-bootmarkt-home__header{display:flex;justify-content:space-between;align-items:end;gap:24px;margin-bottom:24px}
+.ww-bootmarkt-home__eyebrow{margin:0 0 5px;color:#0873c9;font-size:13px;font-weight:750;text-transform:uppercase;letter-spacing:.08em}
+.ww-bootmarkt-home h2{margin:0 0 8px;color:#073d82;font-size:clamp(28px,4vw,44px);line-height:1.1}
+.ww-bootmarkt-home__header p:last-child{margin:0;max-width:720px;color:#526d85}
+.ww-bootmarkt-home__all{display:inline-block;flex:0 0 auto;border-radius:10px;padding:12px 17px;background:#0671ce;color:#fff!important;text-decoration:none;font-weight:700}
+.ww-bootmarkt-home__grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.ww-bootmarkt-home__card{overflow:hidden;border:1px solid #dae6ef;border-radius:16px;background:#fff;box-shadow:0 8px 24px rgba(23,49,76,.07)}
+.ww-bootmarkt-home__image{display:flex;aspect-ratio:4/3;align-items:center;justify-content:center;overflow:hidden;background:#e9f0f5;color:#708399;text-decoration:none}
+.ww-bootmarkt-home__image img{width:100%;height:100%;object-fit:cover;transition:transform .25s ease}.ww-bootmarkt-home__card:hover img{transform:scale(1.025)}
+.ww-bootmarkt-home__body{padding:16px}.ww-bootmarkt-home__location{margin:0;color:#657b8f;font-size:13px}.ww-bootmarkt-home__body h3{margin:5px 0 10px;font-size:19px;line-height:1.25}
+.ww-bootmarkt-home__body h3 a{color:#0b3769;text-decoration:none}.ww-bootmarkt-home__price{margin:0;color:#082d58;font-size:21px;font-weight:800}
+.ww-bootmarkt-home__loading,.ww-bootmarkt-home__empty{grid-column:1/-1;padding:28px;text-align:center;color:#5b7185}
+@media(max-width:900px){.ww-bootmarkt-home__grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.ww-bootmarkt-home{margin:28px 12px;padding:24px 16px}.ww-bootmarkt-home__header{display:block}.ww-bootmarkt-home__all{margin-top:18px}.ww-bootmarkt-home__grid{grid-template-columns:1fr}}

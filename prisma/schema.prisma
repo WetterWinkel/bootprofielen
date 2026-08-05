@@ -45,3 +45,78 @@ model BoatTransfer {
   @@unique([shop, profileId])
   @@index([expiresAt])
 }
+
+enum BoatListingStatus {
+  DRAFT
+  AWAITING_PAYMENT
+  PENDING_REVIEW
+  ACTIVE
+  REJECTED
+  SOLD
+  EXPIRED
+}
+
+model BoatListing {
+  id               String            @id @default(cuid())
+  shop             String
+  customerId       String
+  profileId        String
+  slug             String            @unique
+  status           BoatListingStatus @default(DRAFT)
+  title            String
+  description      String
+  priceCents       Int
+  currency         String            @default("EUR")
+  sellerType       String
+  vatStatus        String
+  location         String
+  publicData       Json
+  photos           Json
+  coverPhotoUrl    String?
+  paymentToken     String?           @unique
+  draftOrderId     String?           @unique
+  paidOrderId      String?           @unique
+  paidAt           DateTime?
+  publishedAt      DateTime?
+  expiresAt        DateTime?
+  soldAt           DateTime?
+  rejectionReason  String?
+  termsAcceptedAt  DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  inquiries        BoatListingInquiry[]
+  reports          BoatListingReport[]
+
+  @@index([shop, customerId, updatedAt])
+  @@index([shop, status, publishedAt])
+  @@index([profileId])
+  @@index([expiresAt])
+}
+
+model BoatListingInquiry {
+  id        String      @id @default(cuid())
+  listingId String
+  name      String
+  email     String
+  phone     String?
+  message   String
+  createdAt DateTime    @default(now())
+  listing   BoatListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, createdAt])
+}
+
+model BoatListingReport {
+  id        String      @id @default(cuid())
+  listingId String
+  name      String
+  email     String
+  reason    String
+  details   String
+  createdAt DateTime    @default(now())
+  resolvedAt DateTime?
+  listing   BoatListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, createdAt])
+  @@index([resolvedAt])
+}

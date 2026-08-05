@@ -1,5 +1,28 @@
 # Shopify App Template - React Router
 
+## WetterWinkel Bootmarkt
+
+De Bootmarkt is bewust ingericht als advertentieplatform, niet als verkoopbemiddelaar:
+
+- € 14,95 inclusief btw per advertentie;
+- 30 kalenderdagen online vanaf goedkeuring;
+- een advertentie wordt gemaakt vanuit een bootprofiel;
+- maximaal 20 foto's;
+- betaling via een Shopify-conceptbestelling;
+- publicatie pas na betaling en handmatige WetterWinkel-controle;
+- openbare Bootmarkt via de app-proxy `/apps/bootmarkt`;
+- meldknop, moderatie, reacties en statusbeheer;
+- bootbetaling, keuring en eigendomsoverdracht blijven buiten WetterWinkel.
+
+Na het samenvoegen van deze code zijn beide deployments nodig:
+
+1. Laat Render `main` opnieuw uitrollen. De Prisma-migratie wordt door `npm run setup` uitgevoerd.
+2. Voer lokaal `shopify app deploy` uit en keur de nieuwe scopes in Shopify goed.
+3. Voeg in de Shopify thema-editor op de homepage het appblok **WetterWinkel Bootmarkt** toe.
+4. Open **Apps → Bootprofielen → Bootmarkt** om betaalde advertenties goed te keuren.
+
+De route `/apps/bootmarkt/voorwaarden` bevat een technisch concept van de advertentievoorwaarden. Laat voorwaarden, privacy, DSA-procedure en fiscale positie vóór openbare livegang controleren.
+
 This is a template for building a [Shopify app](https://shopify.dev/docs/apps/getting-started) using [React Router](https://reactrouter.com/). It was forked from the [Shopify Remix app template](https://github.com/Shopify/shopify-app-template-remix) and converted to React Router.
 
 Rather than cloning this repo, follow the [Quick Start steps](https://github.com/Shopify/shopify-app-template-react-router#quick-start).

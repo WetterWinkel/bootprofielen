@@ -1,6 +1,7 @@
 import '@shopify/ui-extensions/preact';
 import {createContext, render} from 'preact';
 import {useContext, useEffect, useState} from 'preact/hooks';
+import {BoatMarketplace} from './BoatMarketplace';
 
 const API_URL =
   'https://bootprofielen.onrender.com/api/bootprofielen';
@@ -463,6 +464,8 @@ function Extension() {
           </s-button>
         </s-stack>
       )}
+
+      <BoatMarketplace />
 
     </s-stack>
   );
