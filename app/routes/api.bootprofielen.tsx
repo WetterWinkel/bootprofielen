@@ -97,7 +97,10 @@ function exportUrl(request: Request, shopDomain: string, customerId: string, pro
     profileId,
     exp: Date.now() + 2 * 60 * 60 * 1000,
   });
-  const url = new URL("/api/bootprofielen/export", request.url);
+  // Keep the PDF endpoint independent from the api.bootprofielen resource
+  // route. A dotted filename below that resource becomes a nested route and
+  // prevents a direct document download in the customer-account iframe.
+  const url = new URL("/api/bootdossier-export", request.url);
   url.searchParams.set("token", token);
   return url.toString();
 }
