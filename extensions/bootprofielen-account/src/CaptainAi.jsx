@@ -21,6 +21,8 @@ export function CaptainAi({ profileId, profile }) {
   const [question, setQuestion] = useState("");
   const [notice, setNotice] = useState("");
   const [consent, setConsent] = useState(false);
+  const [usage, setUsage] = useState(null);
+  const [checkoutUrl, setCheckoutUrl] = useState("");
 
   async function request(method, body, query = "") {
     const token = await globalThis.shopify.sessionToken.get();
@@ -40,9 +42,13 @@ export function CaptainAi({ profileId, profile }) {
       json = {};
     }
     if (!result.ok || !json.success) {
-      throw new Error(
+      const error = new Error(
         json.message || `Captain AI reageerde niet (status ${result.status}).`,
       );
+      error.status = result.status;
+      error.paymentRequired = Boolean(json.paymentRequired);
+      error.usage = json.usage;
+      throw error;
     }
     return json;
   }
@@ -61,6 +67,7 @@ export function CaptainAi({ profileId, profile }) {
       setConversationId(conversation?.id || "");
       setMessages(conversation?.messages || []);
       setConsent(Boolean(conversation?.improvementConsent));
+      setUsage(json.usage || null);
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -74,6 +81,8 @@ export function CaptainAi({ profileId, profile }) {
     setQuestion("");
     setNotice("");
     setConsent(false);
+    setUsage(null);
+    setCheckoutUrl("");
     if (open && profileId) loadConversation();
     // Een profielwissel reset bewust de chat; openen laadt het gesprek via toggle().
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,9 +117,33 @@ export function CaptainAi({ profileId, profile }) {
       });
       setConversationId(json.conversationId || conversationId);
       setMessages((old) => [...old, json.message]);
+      setUsage(json.usage || usage);
     } catch (error) {
       setMessages((old) => old.filter((message) => message.id !== localId));
       setQuestion(value);
+      setNotice(error.message);
+      if (error.usage) setUsage(error.usage);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function buyCredits() {
+    if (!profileId || busy) return;
+    setBusy(true);
+    setNotice("");
+    setCheckoutUrl("");
+    try {
+      const json = await request("POST", {
+        intent: "create_credit_checkout",
+        profileId,
+      });
+      setCheckoutUrl(json.checkoutUrl || "");
+      setUsage(json.usage || usage);
+      setNotice(
+        "De veilige Shopify-betaling staat klaar. Na betaling wordt het tegoed automatisch toegevoegd.",
+      );
+    } catch (error) {
       setNotice(error.message);
     } finally {
       setBusy(false);
@@ -211,6 +244,43 @@ export function CaptainAi({ profileId, profile }) {
               Uw gesprekken worden veilig bij dit klantaccount en bootprofiel
               opgeslagen. U kunt een gesprek hieronder verwijderen.
             </s-text>
+
+            {usage && (
+              <s-box padding="base" border="base" borderRadius="base">
+                <s-stack gap="small-300">
+                  <s-heading>Captain AI-tegoed</s-heading>
+                  <s-text>
+                    Deze maand nog {usage.freeRemaining} gratis antwoord(en).
+                    Extra tegoed: {usage.creditBalance} antwoord(en).
+                  </s-text>
+                  <s-text>
+                    {usage.creditPackSize} extra antwoorden voor{" "}
+                    {(usage.creditPackPriceCents / 100)
+                      .toFixed(2)
+                      .replace(".", ",")}{" "}
+                    euro inclusief btw.
+                  </s-text>
+                  <s-button onClick={buyCredits} disabled={busy}>
+                    Extra AI-antwoorden kopen
+                  </s-button>
+                  {checkoutUrl && (
+                    <s-button
+                      href={checkoutUrl}
+                      target="_blank"
+                      variant="primary"
+                    >
+                      Veilige Shopify-betaling openen
+                    </s-button>
+                  )}
+                  <s-button
+                    onClick={loadConversation}
+                    disabled={busy || loading}
+                  >
+                    Tegoed na betaling vernieuwen
+                  </s-button>
+                </s-stack>
+              </s-box>
+            )}
 
             <s-checkbox
               label="Mijn feedback mag geanonimiseerd worden gebruikt om Captain AI gecontroleerd te verbeteren"

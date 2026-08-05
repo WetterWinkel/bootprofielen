@@ -31,9 +31,15 @@ services:
       - key: OPENAI_VECTOR_STORE_ID
         sync: false
       - key: CAPTAIN_AI_DAILY_LIMIT
-        value: 30
-      - key: CAPTAIN_AI_PUBLIC_DAILY_LIMIT
-        value: 150
+        value: 10
+      - key: CAPTAIN_AI_GLOBAL_DAILY_LIMIT
+        value: 100
+      - key: CAPTAIN_AI_FREE_MONTHLY_LIMIT
+        value: 3
+      - key: CAPTAIN_AI_CREDIT_PACK_SIZE
+        value: 25
+      - key: CAPTAIN_AI_CREDIT_PACK_PRICE_CENTS
+        value: 995
       - key: SCOPES
         value: read_customers,write_customers,read_products,read_metaobjects,write_metaobjects,read_metaobject_definitions,write_metaobject_definitions,read_files,write_files,read_orders,write_draft_orders,write_app_proxy
 

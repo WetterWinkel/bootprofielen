@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { randomBytes } from "node:crypto";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { answerCaptainQuestion } from "../captain-ai.server";
 import prisma from "../db.server";
@@ -7,6 +8,192 @@ import { authenticate, unauthenticated } from "../shopify.server";
 const METAFIELD_NAMESPACE = "$app";
 const METAFIELD_KEY = "bootprofielen";
 const MAX_MESSAGE_LENGTH = 1_500;
+const DAY_MS = 24 * 60 * 60 * 1_000;
+
+function positiveInt(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function monthStart() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+function captainOffer() {
+  return {
+    freeMonthlyLimit: positiveInt(process.env.CAPTAIN_AI_FREE_MONTHLY_LIMIT, 3),
+    creditPackSize: positiveInt(process.env.CAPTAIN_AI_CREDIT_PACK_SIZE, 25),
+    creditPackPriceCents: positiveInt(
+      process.env.CAPTAIN_AI_CREDIT_PACK_PRICE_CENTS,
+      995,
+    ),
+  };
+}
+
+async function usageSummary(shop: string, customerId: string) {
+  const offer = captainOffer();
+  const [freeUsed, balance] = await Promise.all([
+    prisma.captainMessage.count({
+      where: {
+        role: "USER",
+        usageType: "FREE",
+        createdAt: { gte: monthStart() },
+        conversation: { shop, customerId, channel: "ACCOUNT" },
+      },
+    }),
+    prisma.captainCreditBalance.findUnique({
+      where: { shop_customerId: { shop, customerId } },
+    }),
+  ]);
+  return {
+    freeRemaining: Math.max(0, offer.freeMonthlyLimit - freeUsed),
+    creditBalance: balance?.credits ?? 0,
+    ...offer,
+  };
+}
+
+async function creditPurchase(purchase: any, paidOrderId: string) {
+  await prisma.$transaction(async (tx) => {
+    const credited = await tx.captainCreditPurchase.updateMany({
+      where: { id: purchase.id, shop: purchase.shop, paidAt: null },
+      data: { paidAt: new Date(), paidOrderId },
+    });
+    if (!credited.count) return;
+    await tx.captainCreditBalance.upsert({
+      where: {
+        shop_customerId: {
+          shop: purchase.shop,
+          customerId: purchase.customerId,
+        },
+      },
+      create: {
+        shop: purchase.shop,
+        customerId: purchase.customerId,
+        credits: purchase.credits,
+      },
+      update: { credits: { increment: purchase.credits } },
+    });
+  });
+}
+
+async function reconcileCreditPurchases(
+  admin: any,
+  shop: string,
+  customerId: string,
+) {
+  const purchases = await prisma.captainCreditPurchase.findMany({
+    where: { shop, customerId, paidAt: null, draftOrderId: { not: null } },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+  });
+  if (!purchases.length) return;
+  try {
+    const ids = purchases.flatMap((purchase) =>
+      purchase.draftOrderId ? [purchase.draftOrderId] : [],
+    );
+    const result = await admin.graphql(
+      `#graphql
+        query ControleerCaptainAiBetalingen($ids: [ID!]!) {
+          nodes(ids: $ids) {
+            ... on DraftOrder { id status order { id } }
+          }
+        }
+      `,
+      { variables: { ids } },
+    );
+    const json: any = await result.json();
+    for (const draft of json.data?.nodes ?? []) {
+      if (draft?.status !== "COMPLETED" || !draft?.order?.id) continue;
+      const purchase = purchases.find((item) => item.draftOrderId === draft.id);
+      if (purchase) await creditPurchase(purchase, draft.order.id);
+    }
+  } catch (error) {
+    console.warn("Captain AI-betaling controleren mislukt", error);
+  }
+}
+
+async function createCreditCheckout(
+  admin: any,
+  shop: string,
+  customerId: string,
+) {
+  const offer = captainOffer();
+  const paymentToken = randomBytes(24).toString("hex");
+  const purchase = await prisma.captainCreditPurchase.create({
+    data: {
+      shop,
+      customerId,
+      credits: offer.creditPackSize,
+      priceCents: offer.creditPackPriceCents,
+      paymentToken,
+    },
+  });
+  try {
+    const result = await admin.graphql(
+      `#graphql
+        mutation MaakCaptainAiTegoedBetaling($input: DraftOrderInput!) {
+          draftOrderCreate(input: $input) {
+            draftOrder { id invoiceUrl status }
+            userErrors { field message }
+          }
+        }
+      `,
+      {
+        variables: {
+          input: {
+            purchasingEntity: { customerId },
+            presentmentCurrencyCode: "EUR",
+            taxExempt: false,
+            useCustomerDefaultAddress: true,
+            visibleToCustomer: true,
+            allowDiscountCodesInCheckout: false,
+            tags: ["captain-ai", "ai-tegoed"],
+            note: `WetterWinkel Captain AI – ${offer.creditPackSize} extra antwoorden`,
+            customAttributes: [
+              { key: "ww_captain_credit_token", value: paymentToken },
+              {
+                key: "ww_captain_credit_count",
+                value: String(offer.creditPackSize),
+              },
+            ],
+            lineItems: [
+              {
+                title: `Captain AI-tegoed – ${offer.creditPackSize} antwoorden`,
+                quantity: 1,
+                originalUnitPriceWithCurrency: {
+                  amount: (offer.creditPackPriceCents / 100).toFixed(2),
+                  currencyCode: "EUR",
+                },
+                requiresShipping: false,
+                taxable: true,
+                sku: `WW-CAPTAIN-${offer.creditPackSize}`,
+              },
+            ],
+          },
+        },
+      },
+    );
+    const json: any = await result.json();
+    const payload = json.data?.draftOrderCreate;
+    const errors = payload?.userErrors ?? json.errors ?? [];
+    if (errors.length || !payload?.draftOrder?.invoiceUrl) {
+      throw new Error(
+        errors[0]?.message || "Shopify kon de betaling niet voorbereiden",
+      );
+    }
+    await prisma.captainCreditPurchase.update({
+      where: { id: purchase.id },
+      data: { draftOrderId: payload.draftOrder.id },
+    });
+    return payload.draftOrder.invoiceUrl as string;
+  } catch (error) {
+    await prisma.captainCreditPurchase
+      .delete({ where: { id: purchase.id } })
+      .catch(() => undefined);
+    throw error;
+  }
+}
 
 function response(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -130,9 +317,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
       orderBy: { updatedAt: "desc" },
       include: { messages: { orderBy: { createdAt: "asc" }, take: 50 } },
     });
+    await reconcileCreditPurchases(admin, shop, customerId);
     return cors(
       response({
         success: true,
+        usage: await usageSummary(shop, customerId),
         conversation: conversation
           ? {
               id: conversation.id,
@@ -248,6 +437,17 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
+    if (body.intent === "create_credit_checkout") {
+      const checkoutUrl = await createCreditCheckout(admin, shop, customerId);
+      return cors(
+        response({
+          success: true,
+          checkoutUrl,
+          usage: await usageSummary(shop, customerId),
+        }),
+      );
+    }
+
     if (body.intent !== "ask") {
       return cors(
         response(
@@ -273,17 +473,28 @@ export async function action({ request }: ActionFunctionArgs) {
         ),
       );
     }
-    const dailyLimit = Math.max(
-      1,
-      Number(process.env.CAPTAIN_AI_DAILY_LIMIT || 30),
+    const since = new Date(Date.now() - DAY_MS);
+    const dailyLimit = positiveInt(process.env.CAPTAIN_AI_DAILY_LIMIT, 10);
+    const globalDailyLimit = positiveInt(
+      process.env.CAPTAIN_AI_GLOBAL_DAILY_LIMIT,
+      100,
     );
-    const usedToday = await prisma.captainMessage.count({
-      where: {
-        role: "USER",
-        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-        conversation: { shop, customerId },
-      },
-    });
+    const [usedToday, globalUsedToday] = await Promise.all([
+      prisma.captainMessage.count({
+        where: {
+          role: "USER",
+          createdAt: { gte: since },
+          conversation: { shop, customerId, channel: "ACCOUNT" },
+        },
+      }),
+      prisma.captainMessage.count({
+        where: {
+          role: "USER",
+          createdAt: { gte: since },
+          conversation: { shop, channel: "ACCOUNT" },
+        },
+      }),
+    ]);
     if (usedToday >= dailyLimit) {
       return cors(
         response(
@@ -293,6 +504,35 @@ export async function action({ request }: ActionFunctionArgs) {
               "Uw Captain AI-daglimiet is bereikt. Probeer het morgen opnieuw.",
           },
           429,
+        ),
+      );
+    }
+    if (globalUsedToday >= globalDailyLimit) {
+      return cors(
+        response(
+          {
+            success: false,
+            message:
+              "Captain AI heeft het gezamenlijke dagbudget bereikt. Uw tegoed blijft bewaard; probeer het morgen opnieuw.",
+          },
+          429,
+        ),
+      );
+    }
+
+    const usage = await usageSummary(shop, customerId);
+    const usageType = usage.freeRemaining > 0 ? "FREE" : "CREDIT";
+    if (usageType === "CREDIT" && usage.creditBalance <= 0) {
+      return cors(
+        response(
+          {
+            success: false,
+            paymentRequired: true,
+            message:
+              "Uw gratis Captain AI-antwoorden voor deze maand zijn gebruikt. Koop extra tegoed om verder te vragen.",
+            usage,
+          },
+          402,
         ),
       );
     }
@@ -329,10 +569,38 @@ export async function action({ request }: ActionFunctionArgs) {
       });
     }
 
-    const userMessage = await prisma.captainMessage.create({
-      data: { conversationId: conversation.id, role: "USER", content: message },
-    });
+    let creditReserved = false;
+    if (usageType === "CREDIT") {
+      const reservation = await prisma.captainCreditBalance.updateMany({
+        where: { shop, customerId, credits: { gt: 0 } },
+        data: { credits: { decrement: 1 } },
+      });
+      if (!reservation.count) {
+        return cors(
+          response(
+            {
+              success: false,
+              paymentRequired: true,
+              message: "Uw Captain AI-tegoed is op.",
+              usage: await usageSummary(shop, customerId),
+            },
+            402,
+          ),
+        );
+      }
+      creditReserved = true;
+    }
+
+    let userMessage: any;
     try {
+      userMessage = await prisma.captainMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: "USER",
+          content: message,
+          usageType,
+        },
+      });
       const history = await prisma.captainMessage.findMany({
         where: { conversationId: conversation.id },
         orderBy: { createdAt: "desc" },
@@ -391,12 +659,22 @@ export async function action({ request }: ActionFunctionArgs) {
           success: true,
           conversationId: conversation.id,
           message: serializedMessage(saved),
+          usage: await usageSummary(shop, customerId),
         }),
       );
     } catch (error) {
-      await prisma.captainMessage
-        .delete({ where: { id: userMessage.id } })
-        .catch(() => undefined);
+      if (userMessage?.id) {
+        await prisma.captainMessage
+          .delete({ where: { id: userMessage.id } })
+          .catch(() => undefined);
+      }
+      if (creditReserved) {
+        await prisma.captainCreditBalance.upsert({
+          where: { shop_customerId: { shop, customerId } },
+          create: { shop, customerId, credits: 1 },
+          update: { credits: { increment: 1 } },
+        });
+      }
       throw error;
     }
   } catch (error: any) {

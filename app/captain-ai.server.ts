@@ -115,7 +115,7 @@ function instructions(input: CaptainInput) {
 
 PRIVECONTEXT
 Gebruik uitsluitend het bootprofiel en Digitaal serviceboek hieronder als gegevens van deze klant. Neem nooit gegevens aan van een andere klant. Als essentiële gegevens ontbreken, stel eerst een korte gerichte vraag.
-Bij een openbare websitevraag zijn dit handmatig opgegeven bootgegevens. Ook zonder volledig bootprofiel moet je behulpzaam blijven: controleer bekende merk-/modelgegevens via betrouwbare webbronnen en benoem duidelijk welke ontbrekende maat het advies nog kan veranderen.
+Captain AI is alleen beschikbaar nadat de ingelogde klant een geldig bootprofiel heeft gekozen. Vul ontbrekende gegevens nooit aan alsof de klant ze zelf heeft opgegeven.
 
 BOOTPROFIEL
 ${compact(input.profile?.data || {})}
