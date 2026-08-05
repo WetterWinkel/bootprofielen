@@ -122,6 +122,12 @@ function cleanProfile(input: unknown) {
 }
 
 export async function loader({request}: LoaderFunctionArgs) {
+  // React Router can route a CORS preflight to the loader. It must succeed
+  // without authentication so customer-account extensions may call this API.
+  if (request.method === "OPTIONS") {
+    return response({success: true});
+  }
+
   try {
     const {admin, cors, customerId} = await context(request);
     const profiles = await linkedProfiles(admin, customerId);
