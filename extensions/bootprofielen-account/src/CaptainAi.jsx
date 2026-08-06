@@ -258,7 +258,12 @@ function AssistantAnswer({ content }) {
   );
 }
 
-export function CaptainAi({ profileId, profile }) {
+export function CaptainAi({
+  profileId,
+  profile,
+  profileLoading = false,
+  reloadProfiles,
+}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -387,6 +392,15 @@ export function CaptainAi({ profileId, profile }) {
   async function toggle() {
     const next = !open;
     setOpen(next);
+    if (next && !profileId) {
+      setNotice(
+        profileLoading
+          ? "Uw bootprofiel wordt geladen. Captain AI opent automatisch zodra de koppeling gereed is."
+          : "Captain AI kan uw bootprofiel nog niet vinden. Probeer de koppeling opnieuw of sla eerst uw bootprofiel op.",
+      );
+      if (!profileLoading && reloadProfiles) await reloadProfiles();
+      return;
+    }
     if (next && profileId && !conversationId && messages.length === 0) {
       await loadConversation();
     }
@@ -537,13 +551,36 @@ export function CaptainAi({ profileId, profile }) {
 
   return (
     <s-stack gap="base">
-      <s-button onClick={toggle} disabled={!profileId}>
+      <s-button onClick={toggle}>
         {open ? "▼ Captain AI sluiten" : "▶ Captain AI openen"}
       </s-button>
 
       {open && (
         <s-box padding="base" border="base" borderRadius="base">
           <s-stack gap="base">
+            {!profileId && (
+              <s-banner
+                heading={
+                  profileLoading
+                    ? "Captain AI wordt verbonden"
+                    : "Bootprofielkoppeling ontbreekt"
+                }
+                tone="info"
+              >
+                <s-stack gap="small-300">
+                  <s-text>
+                    {profileLoading
+                      ? "Even geduld: uw bootprofiel wordt veilig geladen. U hoeft de pagina niet opnieuw te openen."
+                      : "Captain AI werkt alleen met een opgeslagen bootprofiel. Probeer de koppeling opnieuw; blijft deze melding staan, open dan Bootprofiel en sla de boot opnieuw op."}
+                  </s-text>
+                  {!profileLoading && reloadProfiles && (
+                    <s-button onClick={reloadProfiles}>
+                      Bootprofiel opnieuw koppelen
+                    </s-button>
+                  )}
+                </s-stack>
+              </s-banner>
+            )}
             <s-grid
               gridTemplateColumns="96px minmax(0, 1fr)"
               gap="base"
@@ -731,7 +768,7 @@ export function CaptainAi({ profileId, profile }) {
             <s-text-area
               label="Uw vraag aan Captain AI"
               value={question}
-              disabled={busy}
+              disabled={busy || !profileId}
               onInput={(event) => setQuestion(event.currentTarget.value)}
               onChange={(event) => setQuestion(event.currentTarget.value)}
             />
@@ -741,7 +778,7 @@ export function CaptainAi({ profileId, profile }) {
               accept="image/jpeg,image/png,image/webp"
               label="Foto toevoegen aan uw vraag (maximaal 3)"
               error={imageError || undefined}
-              disabled={busy}
+              disabled={busy || !profileId}
               onInput={chooseQuestionImages}
               onChange={chooseQuestionImages}
             />
@@ -772,14 +809,21 @@ export function CaptainAi({ profileId, profile }) {
             )}
             <s-button
               onClick={ask}
-              disabled={busy || (!question.trim() && !questionImages.length)}
+              disabled={
+                busy ||
+                !profileId ||
+                (!question.trim() && !questionImages.length)
+              }
               variant="primary"
             >
               {busy ? "Captain AI denkt na..." : "Vraag stellen"}
             </s-button>
 
             <s-stack direction="inline" gap="small-300">
-              <s-button onClick={newConversation} disabled={busy}>
+              <s-button
+                onClick={newConversation}
+                disabled={busy || !profileId}
+              >
                 Nieuw gesprek
               </s-button>
               {conversationId && (

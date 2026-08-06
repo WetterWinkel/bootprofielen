@@ -62,18 +62,38 @@ function Extension() {
     return json;
   }
 
+  async function loadProfiles() {
+    setLoading(true);
+    try {
+      const json = await api('GET');
+      const items = json.profiles || [];
+      const selected =
+        items.find((profile) => profile.id === activeId) || items[0] || null;
+      setProfiles(items);
+      setActiveId(selected?.id || '');
+      setForm(selected?.data || {});
+      if (selected) {
+        setMessage('');
+      } else {
+        setMessage(
+          'Captain AI heeft een opgeslagen bootprofiel nodig. Open Bootprofiel en sla uw boot eerst op.',
+        );
+      }
+      return selected?.id || '';
+    } catch (error) {
+      setMessage(
+        `Bootprofielen laden mislukt: ${error.message}. Probeer de koppeling opnieuw.`,
+      );
+      return '';
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    api('GET')
-      .then((json) => {
-        const items = json.profiles || [];
-        setProfiles(items);
-        if (items[0]) {
-          setActiveId(items[0].id);
-          setForm(items[0].data || {});
-        }
-      })
-      .catch((error) => setMessage(error.message))
-      .finally(() => setLoading(false));
+    loadProfiles();
+    // Alleen bij het openen van de klantaccount-extension laden.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function selectProfile(id) {
@@ -439,9 +459,10 @@ function Extension() {
         fileBase64={fileBase64}
       />
       <CaptainAi
-        key={`captain-${activeId || 'geen-boot'}`}
         profileId={activeId}
         profile={activeProfile}
+        profileLoading={loading}
+        reloadProfiles={loadProfiles}
       />
 
       <s-button onClick={() => setDossierOpen(!dossierOpen)}>
