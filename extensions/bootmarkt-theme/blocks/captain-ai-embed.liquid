@@ -1,7 +1,8 @@
 <div
   class="ww-captain"
   data-ww-captain
-  data-endpoint="/apps/bootmarkt/captain-ai"\n  data-tips="{{ block.settings.toon_tips }}"
+  data-endpoint="/apps/bootmarkt/captain-ai"
+  data-tips="{{ block.settings.toon_tips }}"
   data-account-url="/account/profile"
   data-image="https://bootprofielen.onrender.com/captain-ai.png"
 >
@@ -22,7 +23,8 @@
         "variantTitle": {{ product.selected_or_first_available_variant.title | json }},
         "sku": {{ product.selected_or_first_available_variant.sku | json }},
         "image": {{ product.featured_image | image_url: width: 900 | json }},
-        "tags": {{ product.tags | json }},\n        "variants": {{ product.variants | json }}
+        "tags": {{ product.tags | json }},
+        "variants": {{ product.variants | json }}
       }{% else %}null{% endif %},
       "collection": {% if collection %}{
         "id": {{ collection.id | json }},
@@ -70,7 +72,7 @@
         <form class="ww-captain__form" data-captain-form>
           <label>
             Uw vraag aan Captain AI
-            <textarea data-captain-question maxlength="1500" rows="3" placeholder="Bijvoorbeeld: welke maat fender past bij mijn boot?" required></textarea>
+            <textarea data-captain-question maxlength="1500" rows="3" placeholder="Bijvoorbeeld: past dit product bij mijn boot en welke uitvoering heb ik nodig?" required></textarea>
           </label>
           <button class="ww-captain__send" type="submit">Vraag stellen</button>
           <p class="ww-captain__remaining" data-captain-remaining></p>
