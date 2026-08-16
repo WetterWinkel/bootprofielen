@@ -10,19 +10,9 @@
     }
   }
 
-  function productLooksLikeFender(product) {
-    if (!product) return false;
-    return /\b(fender|fenders|stootwil|stootwillen|stootkussen)\b/i.test(
-      [product.title, product.type, product.vendor, (product.tags || []).join(" ")].join(" "),
-    );
-  }
-
   function tipText(context) {
-    if (productLooksLikeFender(context.product)) {
-      return "Ik kan met uw bootprofiel helpen bepalen welke maat en hoeveel fenders u nodig heeft.";
-    }
     if (context.product) {
-      return "Twijfelt u of dit product bij uw boot past? Vraag het Captain AI.";
+      return "Ik kan controleren of " + context.product.title + " bij uw bootprofiel past en helpen met maat, uitvoering en toepassing.";
     }
     if (context.collection) {
       return "Hulp nodig met kiezen binnen " + context.collection.title + "? Vraag het Captain AI.";
@@ -217,7 +207,7 @@
               tip.hidden = false;
               localStorage.setItem(TIP_KEY, String(Date.now()));
             }
-          }, productLooksLikeFender(context.product) ? 5500 : 9000);
+          }, context.product ? 5500 : 9000);
         }
       } catch {
         // Privacy settings may disable storage; the launcher remains available.
