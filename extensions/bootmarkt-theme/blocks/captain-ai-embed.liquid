@@ -1,17 +1,51 @@
 <div
   class="ww-captain"
   data-ww-captain
+  data-endpoint="/apps/bootmarkt/captain-ai"\n  data-tips="{{ block.settings.toon_tips }}"
   data-account-url="/account/profile"
-  data-products-url="/collections/all"
-  data-contact-url="/pages/contact"
   data-image="https://bootprofielen.onrender.com/captain-ai.png"
 >
+  <script type="application/json" data-captain-context>
+    {
+      "pageType": {{ request.page_type | json }},
+      "url": {{ canonical_url | json }},
+      "product": {% if product %}{
+        "id": {{ product.id | json }},
+        "title": {{ product.title | json }},
+        "handle": {{ product.handle | json }},
+        "url": {{ product.url | json }},
+        "vendor": {{ product.vendor | json }},
+        "type": {{ product.type | json }},
+        "description": {{ product.description | strip_html | truncate: 1800 | json }},
+        "price": {{ product.selected_or_first_available_variant.price | money_with_currency | json }},
+        "variantId": {{ product.selected_or_first_available_variant.id | json }},
+        "variantTitle": {{ product.selected_or_first_available_variant.title | json }},
+        "sku": {{ product.selected_or_first_available_variant.sku | json }},
+        "image": {{ product.featured_image | image_url: width: 900 | json }},
+        "tags": {{ product.tags | json }},\n        "variants": {{ product.variants | json }}
+      }{% else %}null{% endif %},
+      "collection": {% if collection %}{
+        "id": {{ collection.id | json }},
+        "title": {{ collection.title | json }},
+        "handle": {{ collection.handle | json }},
+        "url": {{ collection.url | json }}
+      }{% else %}null{% endif %}
+    }
+  </script>
+
+  <aside class="ww-captain__tip" data-captain-tip hidden>
+    <button type="button" class="ww-captain__tip-close" data-captain-tip-close aria-label="Tip sluiten">×</button>
+    <strong>Captain AI</strong>
+    <span data-captain-tip-text>Heeft u vragen? Vraag het Captain AI.</span>
+    <button type="button" class="ww-captain__tip-action" data-captain-tip-open>Vraag het Captain AI</button>
+  </aside>
+
   <button class="ww-captain__launcher" type="button" data-captain-open aria-expanded="false">
     <img src="https://bootprofielen.onrender.com/captain-ai.png" alt="" width="52" height="52" loading="lazy">
     <span>{{ block.settings.knoptekst | escape }}</span>
   </button>
 
-  <section class="ww-captain__panel" data-captain-panel hidden aria-label="Captain AI">
+  <section class="ww-captain__panel" data-captain-panel hidden aria-label="Captain AI" role="dialog" aria-modal="false">
     <header class="ww-captain__header">
       <img src="https://bootprofielen.onrender.com/captain-ai.png" alt="Captain AI van WetterWinkel" width="64" height="64">
       <div>
@@ -22,20 +56,25 @@
     </header>
 
     <div class="ww-captain__body">
-      <p class="ww-captain__intro">
-        Captain AI gebruikt uw persoonlijke bootprofiel en Digitaal serviceboek om gericht te adviseren.
-        Technische informatie mag uit betrouwbare externe bronnen komen; aanbevolen producten komen uitsluitend
-        uit de WetterWinkel-webshop.
-      </p>
+      <p class="ww-captain__context" data-captain-context-label></p>
+      <div class="ww-captain__status" data-captain-status>Captain AI wordt verbonden…</div>
 
-      <div class="ww-captain__gate">
-        <strong>Eerst een persoonlijk bootprofiel</strong>
-        <p>Log in en maak gratis uw bootprofiel. Daarna krijgt u iedere maand een aantal gratis Captain AI-antwoorden en kunt u zo nodig extra tegoed kopen.</p>
+      <div class="ww-captain__gate" data-captain-gate hidden>
+        <strong>Maak Captain AI persoonlijk</strong>
+        <p data-captain-gate-text>Log in en maak gratis uw bootprofiel. Daarna kan Captain AI rekening houden met uw boot.</p>
         <a href="/account/profile" class="ww-captain__primary">Naar mijn bootprofiel</a>
-        <div class="ww-captain__alternatives">
-          <a href="/collections/all">Producten bekijken</a>
-          <a href="/pages/contact">Persoonlijk contact</a>
-        </div>
+      </div>
+
+      <div data-captain-chat hidden>
+        <div class="ww-captain__messages" data-captain-messages aria-live="polite"></div>
+        <form class="ww-captain__form" data-captain-form>
+          <label>
+            Uw vraag aan Captain AI
+            <textarea data-captain-question maxlength="1500" rows="3" placeholder="Bijvoorbeeld: welke maat fender past bij mijn boot?" required></textarea>
+          </label>
+          <button class="ww-captain__send" type="submit">Vraag stellen</button>
+          <p class="ww-captain__remaining" data-captain-remaining></p>
+        </form>
       </div>
 
       <p class="ww-captain__privacy">
@@ -53,7 +92,8 @@
   "stylesheet": "captain-ai.css",
   "javascript": "captain-ai.js",
   "settings": [
-    {"type": "text", "id": "knoptekst", "label": "Knoptekst", "default": "Vraag Captain AI"}
+    {"type": "text", "id": "knoptekst", "label": "Knoptekst", "default": "Vraag Captain AI"},
+    {"type": "checkbox", "id": "toon_tips", "label": "Toon af en toe een helptip", "default": true}
   ]
 }
 {% endschema %}
