@@ -1,7 +1,7 @@
 <div
   class="ww-captain"
   data-ww-captain
-  data-endpoint="/apps/bootmarkt/captain-ai"
+  data-endpoint="/apps/bootmarkt/captain-ai"\n  data-tips="{{ block.settings.toon_tips }}"
   data-account-url="/account/profile"
   data-image="https://bootprofielen.onrender.com/captain-ai.png"
 >
@@ -22,7 +22,7 @@
         "variantTitle": {{ product.selected_or_first_available_variant.title | json }},
         "sku": {{ product.selected_or_first_available_variant.sku | json }},
         "image": {{ product.featured_image | image_url: width: 900 | json }},
-        "tags": {{ product.tags | json }}
+        "tags": {{ product.tags | json }},\n        "variants": {{ product.variants | json }}
       }{% else %}null{% endif %},
       "collection": {% if collection %}{
         "id": {{ collection.id | json }},
