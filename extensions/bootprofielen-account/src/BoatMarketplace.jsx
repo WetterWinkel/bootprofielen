@@ -13,7 +13,7 @@ const EMPTY_FORM = {
 
 const STATUS_LABELS = {
   DRAFT: 'Concept', AWAITING_PAYMENT: 'Wacht op betaling',
-  PENDING_REVIEW: 'Betaald – controle door WetterWinkel', ACTIVE: 'Online',
+  PENDING_REVIEW: 'Controle door WetterWinkel', ACTIVE: 'Online',
   REJECTED: 'Aanpassen en opnieuw indienen', SOLD: 'Verkocht', EXPIRED: 'Verlopen',
 };
 
@@ -47,7 +47,6 @@ export function BoatMarketplace() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [photoFiles, setPhotoFiles] = useState([]);
   const [photoInputKey, setPhotoInputKey] = useState(0);
-  const [checkoutUrl, setCheckoutUrl] = useState('');
 
   const listing = listings.find((item) => item.id === listingId);
   const locked = ['PENDING_REVIEW', 'ACTIVE'].includes(listing?.status);
@@ -95,7 +94,6 @@ export function BoatMarketplace() {
     setForm(fromListing(selected));
     setPhotoFiles([]);
     setPhotoInputKey((value) => value + 1);
-    setCheckoutUrl('');
     setMessage('');
   }
 
@@ -106,8 +104,7 @@ export function BoatMarketplace() {
     setForm({...EMPTY_FORM, title: [profile?.data?.merk_boot, profile?.data?.model_boot, profile?.data?.naam_schip].filter(Boolean).join(' – ')});
     setPhotoFiles([]);
     setPhotoInputKey((value) => value + 1);
-    setCheckoutUrl('');
-    setMessage('Nieuwe advertentie geopend.');
+    setMessage('Vul de advertentie aan en kies daarna Gratis ter controle indienen.');
   }
 
   async function saveDraft(showMessage = true) {
@@ -190,7 +187,6 @@ export function BoatMarketplace() {
         const json = await api('POST', {intent: 'prepare_checkout', id: saved.id});
         if (json.listing) replaceListing(json.listing);
         setMessage(json.message);
-        setCheckoutUrl(json.checkoutUrl || '');
       } else if (action === 'sold') {
         const json = await api('POST', {intent: 'mark_sold', id: listingId});
         replaceListing(json.listing);
@@ -217,7 +213,7 @@ export function BoatMarketplace() {
       {open && (
         <s-stack gap="base">
           <s-heading>Boot te koop aanbieden</s-heading>
-          <s-text>€ 14,95 inclusief btw. Na betaling en goedkeuring staat de advertentie 30 kalenderdagen online. WetterWinkel verkoopt alleen advertentieruimte en is geen partij bij de verkoop.</s-text>
+          <s-text>Gratis bootadvertentie. Na controle door WetterWinkel staat de advertentie 30 kalenderdagen online. WetterWinkel biedt alleen de advertentieruimte en is geen partij bij de verkoop.</s-text>
           {loading && <s-text>Advertenties laden...</s-text>}
           {listings.length > 0 && (
             <s-select label="Mijn advertenties" value={listingId} onChange={(event) => selectListing(event.currentTarget.value)}>
@@ -270,8 +266,7 @@ export function BoatMarketplace() {
             <s-checkbox label="Ik ben eigenaar of bevoegd om deze boot aan te bieden" checked={form.ownershipConfirmed} onChange={(event) => update('ownershipConfirmed', event.currentTarget.checked)} />
             <s-checkbox label="Ik accepteer de advertentievoorwaarden en verklaar dat de gegevens juist zijn" checked={form.termsAccepted} onChange={(event) => update('termsAccepted', event.currentTarget.checked)} />
             <s-link href="https://www.wetterwinkel.nl/apps/bootmarkt/voorwaarden" target="_blank">Advertentievoorwaarden bekijken</s-link>
-            <s-button variant="primary" onClick={() => run('checkout')} disabled={busy || !listingId || photos.length === 0}>{listing?.paidAt ? 'Opnieuw ter controle indienen' : 'Betalen en ter controle indienen – € 14,95'}</s-button>
-            {checkoutUrl && <s-button href={checkoutUrl} target="_blank">Veilige Shopify-betaling openen</s-button>}
+            <s-button variant="primary" onClick={() => run('checkout')} disabled={busy}>{listing?.status === 'REJECTED' ? 'Opnieuw gratis ter controle indienen' : 'Gratis ter controle indienen'}</s-button>}
           </s-stack>}
 
           {listing?.status === 'ACTIVE' && <s-button onClick={() => run('sold')} disabled={busy}>Markeren als verkocht</s-button>}
