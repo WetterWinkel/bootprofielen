@@ -57,13 +57,13 @@ export async function loader({request}: LoaderFunctionArgs) {
         <h1>WetterWinkel Bootmarkt</h1>
         <p>Boten aangeboden door watersporters met een WetterWinkel-bootprofiel. WetterWinkel biedt de advertentieruimte; koop, inspectie, betaling en eigendomsoverdracht regelt u rechtstreeks met de verkoper.</p>
         <div class="ww-market-actions">
-          <a class="ww-market-sell" href="/account">Boot gratis te koop aanbieden</a>
+          <a class="ww-market-sell" href="/account/profile">Boot gratis te koop aanbieden</a>
           <p class="ww-market-note">Log in of maak een account, vul uw bootprofiel in en dien uw advertentie gratis ter goedkeuring in.</p>
         </div>
       </header>
       ${listings.length
         ? `<section class="ww-market-grid" aria-label="Boten te koop">${listings.map((listing) => card(publicListing(listing))).join("")}</section>`
-        : `<div class="ww-market-empty"><h2>Nog geen boten te koop</h2><p>Word de eerste: maak een bootprofiel en dien uw advertentie gratis in. WetterWinkel controleert de advertentie voordat deze online komt.</p><a class="ww-market-sell" href="/account">Boot gratis te koop aanbieden</a></div>`}
+        : `<div class="ww-market-empty"><h2>Nog geen boten te koop</h2><p>Word de eerste: maak een bootprofiel en dien uw advertentie gratis in. WetterWinkel controleert de advertentie voordat deze online komt.</p><a class="ww-market-sell" href="/account/profile">Boot gratis te koop aanbieden</a></div>`}
     </main>`,
     {headers: {"Cache-Control": "public, max-age=60"}},
   );
