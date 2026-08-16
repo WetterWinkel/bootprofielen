@@ -207,25 +207,37 @@
       }
     });
 
-    try {
-      const last = Number(localStorage.getItem(TIP_KEY) || 0);
-      if (Date.now() - last > DAY) {
-        tipCopy.textContent = tipText(context);
-        setTimeout(() => {
-          if (panel.hidden) {
-            tip.hidden = false;
-            localStorage.setItem(TIP_KEY, String(Date.now()));
-          }
-        }, productLooksLikeFender(context.product) ? 5500 : 9000);
+    if (root.dataset.tips !== "false") {
+      try {
+        const last = Number(localStorage.getItem(TIP_KEY) || 0);
+        if (Date.now() - last > DAY) {
+          tipCopy.textContent = tipText(context);
+          setTimeout(() => {
+            if (panel.hidden) {
+              tip.hidden = false;
+              localStorage.setItem(TIP_KEY, String(Date.now()));
+            }
+          }, productLooksLikeFender(context.product) ? 5500 : 9000);
+        }
+      } catch {
+        // Privacy settings may disable storage; the launcher remains available.
       }
-    } catch {
-      // Privacy settings may disable storage; the launcher remains available.
     }
 
     document.addEventListener("change", (event) => {
       if (!context.product || !event.target.closest('form[action*="/cart/add"]')) return;
       const input = event.target.closest("form").querySelector('[name="id"]');
-      if (input && input.value) {\n        context.product.variantId = input.value;\n        const variant = Array.isArray(context.product.variants)\n          ? context.product.variants.find((item) => String(item.id) === String(input.value))\n          : null;\n        if (variant) {\n          context.product.variantTitle = variant.title || "";\n          context.product.sku = variant.sku || "";\n          context.product.price = variant.price || context.product.price;\n        }\n      }
+      if (input && input.value) {
+        context.product.variantId = input.value;
+        const variant = Array.isArray(context.product.variants)
+          ? context.product.variants.find((item) => String(item.id) === String(input.value))
+          : null;
+        if (variant) {
+          context.product.variantTitle = variant.title || "";
+          context.product.sku = variant.sku || "";
+          context.product.price = variant.price || context.product.price;
+        }
+      }
     });
   }
 
