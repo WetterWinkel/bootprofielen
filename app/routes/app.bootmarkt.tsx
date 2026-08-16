@@ -141,7 +141,7 @@ export default function BootmarktAdmin() {
     <s-page heading="WetterWinkel Bootmarkt">
       <s-section heading="Overzicht">
         <s-stack direction="block" gap="base">
-          <s-text>Prijs: € 14,95 inclusief btw voor 30 kalenderdagen.</s-text>
+          <s-text>Plaatsing is gratis. Na goedkeuring staat een advertentie 30 kalenderdagen online.</s-text>
           <s-text>Te controleren: {pending.length}</s-text>
           <s-text>Nu online: {active.length}</s-text>
           <s-link href={publicBaseUrl} target="_blank">Open de openbare Bootmarkt</s-link>
@@ -150,7 +150,7 @@ export default function BootmarktAdmin() {
 
       <s-section heading="Advertenties controleren">
         <s-stack direction="block" gap="base">
-          {pending.length === 0 && <s-text>Er staan geen betaalde advertenties te wachten.</s-text>}
+          {pending.length === 0 && <s-text>Er staan geen advertenties te wachten op controle.</s-text>}
           {pending.map((listing) => (
             <s-box key={listing.id} padding="base" border="base" borderRadius="base">
               <s-stack direction="block" gap="small-300">
