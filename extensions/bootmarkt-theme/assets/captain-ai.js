@@ -225,7 +225,7 @@
     document.addEventListener("change", (event) => {
       if (!context.product || !event.target.closest('form[action*="/cart/add"]')) return;
       const input = event.target.closest("form").querySelector('[name="id"]');
-      if (input && input.value) context.product.variantId = input.value;
+      if (input && input.value) {\n        context.product.variantId = input.value;\n        const variant = Array.isArray(context.product.variants)\n          ? context.product.variants.find((item) => String(item.id) === String(input.value))\n          : null;\n        if (variant) {\n          context.product.variantTitle = variant.title || "";\n          context.product.sku = variant.sku || "";\n          context.product.price = variant.price || context.product.price;\n        }\n      }
     });
   }
 
