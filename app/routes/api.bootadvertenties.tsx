@@ -5,9 +5,7 @@ import {
   expireListings,
   listingPhotos,
   listingSlug,
-  LISTING_PRICE_CENTS,
   MAX_LISTING_PHOTOS,
-  paymentToken,
 } from "../lib/boat-marketplace.server";
 import {
   deleteShopifyImage,
@@ -141,27 +139,6 @@ function ownerListing(listing: any) {
   };
 }
 
-async function existingDraftCheckout(admin: any, draftOrderId: string | null) {
-  if (!draftOrderId) return null;
-  try {
-    const result = await admin.graphql(
-      `#graphql
-        query BootadvertentieConceptfactuur($id: ID!) {
-          node(id: $id) {
-            ... on DraftOrder { id status invoiceUrl }
-          }
-        }
-      `,
-      {variables: {id: draftOrderId}},
-    );
-    const json: any = await result.json();
-    const draft = json.data?.node;
-    return draft?.status === "OPEN" && draft?.invoiceUrl ? draft.invoiceUrl : null;
-  } catch {
-    return null;
-  }
-}
-
 async function reconcileCheckout(admin: any, listing: any) {
   if (listing.status !== "AWAITING_PAYMENT" || !listing.draftOrderId) return listing;
   try {
@@ -193,62 +170,6 @@ async function reconcileCheckout(admin: any, listing: any) {
   }
 }
 
-async function createCheckout(admin: any, customerId: string, listing: any) {
-  const token = paymentToken();
-  const result = await admin.graphql(
-    `#graphql
-      mutation MaakBootadvertentieBetaling($input: DraftOrderInput!) {
-        draftOrderCreate(input: $input) {
-          draftOrder { id invoiceUrl status }
-          userErrors { field message }
-        }
-      }
-    `,
-    {
-      variables: {
-        input: {
-          purchasingEntity: {customerId},
-          presentmentCurrencyCode: "EUR",
-          taxExempt: false,
-          useCustomerDefaultAddress: true,
-          visibleToCustomer: true,
-          allowDiscountCodesInCheckout: false,
-          tags: ["bootadvertentie", "30-dagen"],
-          note: `WetterWinkel Bootadvertentie 30 dagen – ${listing.title}`,
-          customAttributes: [
-            {key: "ww_bootadvertentie_token", value: token},
-            {key: "ww_bootadvertentie_id", value: listing.id},
-          ],
-          lineItems: [{
-            title: "Bootadvertentie – 30 kalenderdagen",
-            quantity: 1,
-            originalUnitPriceWithCurrency: {amount: (LISTING_PRICE_CENTS / 100).toFixed(2), currencyCode: "EUR"},
-            requiresShipping: false,
-            taxable: true,
-            sku: "WW-BOOTAD-30",
-          }],
-        },
-      },
-    },
-  );
-  const json: any = await result.json();
-  const payload = json.data?.draftOrderCreate;
-  const errors = payload?.userErrors ?? json.errors ?? [];
-  if (errors.length || !payload?.draftOrder?.invoiceUrl) {
-    throw new Error(errors[0]?.message || "Shopify kon de betaling niet voorbereiden");
-  }
-  await prisma.boatListing.update({
-    where: {id: listing.id},
-    data: {
-      status: "AWAITING_PAYMENT",
-      paymentToken: token,
-      draftOrderId: payload.draftOrder.id,
-      rejectionReason: null,
-    },
-  });
-  return payload.draftOrder.invoiceUrl as string;
-}
-
 export async function loader({request}: LoaderFunctionArgs) {
   if (request.method === "OPTIONS") return response({success: true});
   try {
@@ -264,7 +185,7 @@ export async function loader({request}: LoaderFunctionArgs) {
     const refreshed = await Promise.all(reconciled.map((listing) => refreshListing(admin, listing)));
     return cors(response({
       success: true,
-      price: "€ 14,95 inclusief btw",
+      price: "Gratis",
       durationDays: 30,
       profiles: profiles.map((profile: any) => ({id: profile.id, data: profile.data, photo: profile.photo})),
       listings: refreshed.map(ownerListing),
@@ -392,24 +313,22 @@ export async function action({request}: ActionFunctionArgs) {
       if (!listing.termsAcceptedAt || !publicData?.ownershipConfirmed || !publicData?.termsAccepted) {
         return cors(response({success: false, message: "Bevestig het eigendom en de advertentievoorwaarden"}, 400));
       }
-      if (listing.paidAt) {
-        const updated = await prisma.boatListing.update({
-          where: {id: listing.id},
-          data: {status: "PENDING_REVIEW", rejectionReason: null},
-          include: {inquiries: {orderBy: {createdAt: "desc"}, take: 20}},
-        });
-        return cors(response({
-          success: true,
-          message: "De aangepaste advertentie staat opnieuw klaar voor controle. U hoeft niet opnieuw te betalen.",
-          listing: ownerListing(updated),
-        }));
-      }
-      const existingUrl = await existingDraftCheckout(admin, listing.draftOrderId);
-      const checkoutUrl = existingUrl || await createCheckout(admin, customerId, listing);
+      const updated = await prisma.boatListing.update({
+        where: {id: listing.id},
+        data: {
+          status: "PENDING_REVIEW",
+          rejectionReason: null,
+          paymentToken: null,
+          draftOrderId: null,
+          paidOrderId: null,
+          paidAt: null,
+        },
+        include: {inquiries: {orderBy: {createdAt: "desc"}, take: 20}},
+      });
       return cors(response({
         success: true,
-        message: "De betaling van € 14,95 staat klaar. Na betaling controleren wij de advertentie.",
-        checkoutUrl,
+        message: "Uw gratis advertentie staat klaar voor controle door WetterWinkel.",
+        listing: ownerListing(updated),
       }));
     }
 
