@@ -2,7 +2,7 @@
 import {randomBytes} from "node:crypto";
 import prisma from "../db.server";
 
-export const LISTING_PRICE_CENTS = 1495;
+export const LISTING_PRICE_CENTS = 0;
 export const LISTING_DAYS = 30;
 export const MAX_LISTING_PHOTOS = 20;
 
