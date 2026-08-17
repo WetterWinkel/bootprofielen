@@ -187,11 +187,37 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
 
     const currentUsage = await usage(shop, customerId);
+    const recentConversation = await prisma.captainConversation.findFirst({
+      where: {
+        shop,
+        customerId,
+        profileId: profiles[0].id,
+        channel: "STOREFRONT",
+      },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 12,
+        },
+      },
+    });
+    const history = (recentConversation?.messages || [])
+      .slice()
+      .reverse()
+      .map((message: any) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        products: message.products || [],
+      }));
+
     return json({
       success: true,
       profileId: profiles[0].id,
       profileName: profileName(profiles[0]),
       remaining: currentUsage.remaining,
+      history,
     });
   } catch (error: any) {
     console.error("Captain AI storefront laden mislukt", error);
