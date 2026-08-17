@@ -24,6 +24,12 @@ export type CaptainProduct = {
   variantId: string;
   variantTitle: string;
   availableVariantCount: number;
+  variants: Array<{
+    id: string;
+    title: string;
+    available: boolean;
+    options: Array<{ name: string; value: string }>;
+  }>;
 };
 
 export type CaptainImage = {
@@ -198,7 +204,12 @@ async function searchWetterWinkelProducts(admin: any, rawQuery: unknown) {
               minVariantPrice { amount currencyCode }
             }
             variants(first: 50) {
-              nodes { id title availableForSale }
+              nodes {
+                id
+                title
+                availableForSale
+                selectedOptions { name value }
+              }
             }
           }
         }
@@ -238,6 +249,15 @@ async function searchWetterWinkelProducts(admin: any, rawQuery: unknown) {
       availableVariantCount: (product.variants?.nodes ?? []).filter(
         (variant: any) => variant.availableForSale,
       ).length,
+      variants: (product.variants?.nodes ?? []).map((variant: any) => ({
+        id: variant.id,
+        title: variant.title || "",
+        available: Boolean(variant.availableForSale),
+        options: (variant.selectedOptions ?? []).map((option: any) => ({
+          name: String(option.name || ""),
+          value: String(option.value || ""),
+        })),
+      })),
     }),
   );
 }
@@ -302,6 +322,7 @@ PRODUCTBELEID — ABSOLUUT
 - Geef eerst het technisch juiste advies en toon daarna de passende WetterWinkel-producten. Een productkaart is een aanvulling op, nooit een vervanging van, de technische onderbouwing.
 - Als je één of meer passende producten selecteert, bied dan actief aan om het product in de winkelwagen te plaatsen. Zeg kort: "Zal ik dit product voor u in de winkelwagen plaatsen?" De interface toont hiervoor de veilige winkelwagenknop.
 - Doe nooit alsof een product al is toegevoegd. Toevoegen gebeurt pas nadat de klant de winkelwagenknop bevestigt. Bij meerdere verkoopbare varianten moet de klant eerst de uitvoering kiezen.
+- Gebruik de echte Shopify-varianten om relevante keuzes zoals kleur, spanning, lengte, diameter, maat en uitvoering aan te bieden. Verzin geen variantwaarden en kies niet stilzwijgend voor de klant.
 
 AUTOMATISCH VOORGEZOCHTE WETTERWINKEL-PRODUCTEN
 Productkans herkend: ${opportunity.matched ? "ja" : "nee"}
