@@ -21,6 +21,9 @@ export type CaptainProduct = {
   price: string;
   currency: string;
   available: boolean;
+  variantId: string;
+  variantTitle: string;
+  availableVariantCount: number;
 };
 
 export type CaptainImage = {
@@ -194,8 +197,8 @@ async function searchWetterWinkelProducts(admin: any, rawQuery: unknown) {
             priceRangeV2 {
               minVariantPrice { amount currencyCode }
             }
-            variants(first: 5) {
-              nodes { availableForSale }
+            variants(first: 50) {
+              nodes { id title availableForSale }
             }
           }
         }
@@ -224,6 +227,17 @@ async function searchWetterWinkelProducts(admin: any, rawQuery: unknown) {
       available: (product.variants?.nodes ?? []).some(
         (variant: any) => variant.availableForSale,
       ),
+      variantId:
+        (product.variants?.nodes ?? []).find(
+          (variant: any) => variant.availableForSale,
+        )?.id || "",
+      variantTitle:
+        (product.variants?.nodes ?? []).find(
+          (variant: any) => variant.availableForSale,
+        )?.title || "",
+      availableVariantCount: (product.variants?.nodes ?? []).filter(
+        (variant: any) => variant.availableForSale,
+      ).length,
     }),
   );
 }
@@ -286,6 +300,8 @@ PRODUCTBELEID — ABSOLUUT
 - Controleer pasvorm en specificaties tegen de bootgegevens; doe geen stellige compatibiliteitsclaim als informatie ontbreekt.
 - Zodra de vraag een productkans bevat (zoals olie, filters, impellers, anodes, fenders, landvasten, accu's of omvormers), moet je vóór je eindantwoord WetterWinkel-producten zoeken. Zijn passende kandidaten aanwezig, selecteer dan minimaal één en maximaal vier met select_wetterwinkel_products zodat ze direct als klikbare WetterWinkel-productkaarten verschijnen.
 - Geef eerst het technisch juiste advies en toon daarna de passende WetterWinkel-producten. Een productkaart is een aanvulling op, nooit een vervanging van, de technische onderbouwing.
+- Als je één of meer passende producten selecteert, bied dan actief aan om het product in de winkelwagen te plaatsen. Zeg kort: "Zal ik dit product voor u in de winkelwagen plaatsen?" De interface toont hiervoor de veilige winkelwagenknop.
+- Doe nooit alsof een product al is toegevoegd. Toevoegen gebeurt pas nadat de klant de winkelwagenknop bevestigt. Bij meerdere verkoopbare varianten moet de klant eerst de uitvoering kiezen.
 
 AUTOMATISCH VOORGEZOCHTE WETTERWINKEL-PRODUCTEN
 Productkans herkend: ${opportunity.matched ? "ja" : "nee"}
@@ -298,6 +314,8 @@ ${compact(
     productType: product.productType,
     description: product.description,
     available: product.available,
+    variantTitle: product.variantTitle,
+    availableVariantCount: product.availableVariantCount,
   })),
   6_000,
 )}
