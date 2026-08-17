@@ -58,13 +58,13 @@ export async function loader({request}: LoaderFunctionArgs) {
         <h1>WetterWinkel Bootmarkt</h1>
         <p>Boten aangeboden door watersporters met een WetterWinkel-bootprofiel. WetterWinkel biedt de advertentieruimte; koop, inspectie, betaling en eigendomsoverdracht regelt u rechtstreeks met de verkoper.</p>
         <div class="ww-market-actions">
-          <a class="ww-market-sell" href="/account/profile">Maak gratis een advertentie</a>
-          <p class="ww-market-note">Log in of maak gratis een profiel aan. Vul uw bootgegevens in, voeg foto’s toe en dien uw advertentie gratis ter controle in.</p>
+          <a class="ww-market-sell" href="/customer_authentication/redirect?locale=nl&amp;region_country=NL">Maak gratis een advertentie</a>
+          <p class="ww-market-note">U bent slechts één stap verwijderd van het maken van uw persoonlijke bootprofiel. Log in of maak gratis een profiel aan, vul uw bootgegevens in en voeg foto’s toe.</p>
         </div>
       </header>
       ${listings.length
         ? `<section class="ww-market-grid" aria-label="Boten te koop">${listings.map((listing) => card(publicListing(listing))).join("")}</section>`
-        : `<div class="ww-market-empty"><h2>Nog geen boten te koop</h2><p>Word de eerste: maak een profiel aan, voeg uw boot toe en dien uw advertentie gratis in.</p><a class="ww-market-sell" href="/account/profile">Maak gratis een advertentie</a></div>`}
+        : `<div class="ww-market-empty"><h2>Nog geen boten te koop</h2><p>U bent slechts één stap verwijderd van het maken van uw persoonlijke bootprofiel. Voeg daarna uw boot en foto’s toe en dien uw advertentie gratis in.</p><a class="ww-market-sell" href="/customer_authentication/redirect?locale=nl&amp;region_country=NL">Maak gratis een advertentie</a></div>`}
     </main>`,
     {headers: {"Cache-Control": "public, max-age=60"}},
   );
