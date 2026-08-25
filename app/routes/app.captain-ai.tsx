@@ -47,6 +47,7 @@ async function customerNames(admin: any, ids: string[]) {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const [
     conversations,
     conversationCount,
@@ -54,6 +55,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     positiveCount,
     negativeCount,
     tokens,
+    eventGroups,
+    openedVisitors,
   ] = await Promise.all([
     prisma.captainConversation.findMany({
       where: { shop: session.shop },
@@ -75,12 +78,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       where: { conversation: { shop: session.shop } },
       _sum: { inputTokens: true, outputTokens: true },
     }),
+    prisma.captainStorefrontEvent.groupBy({
+      by: ["event"],
+      where: { shop: session.shop, createdAt: { gte: since } },
+      _count: { _all: true },
+    }),
+    prisma.captainStorefrontEvent.findMany({
+      where: {
+        shop: session.shop,
+        event: "CAPTAIN_OPENED",
+        createdAt: { gte: since },
+      },
+      distinct: ["visitorId"],
+      select: { visitorId: true },
+    }),
   ]);
   const names = await customerNames(
     admin,
     conversations
       .map((item) => item.customerId)
       .filter((id) => id.startsWith("gid://shopify/Customer/")),
+  );
+  const eventCounts = new Map(
+    eventGroups.map((item) => [item.event, item._count._all]),
   );
 
   return {
@@ -91,6 +111,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       negative: negativeCount,
       inputTokens: tokens._sum.inputTokens || 0,
       outputTokens: tokens._sum.outputTokens || 0,
+    },
+    storefront: {
+      tipViewed: eventCounts.get("TIP_VIEWED") || 0,
+      captainOpened: eventCounts.get("CAPTAIN_OPENED") || 0,
+      uniqueOpenedVisitors: openedVisitors.length,
+      searches: eventCounts.get("SEARCH_USED") || 0,
+      questions: eventCounts.get("QUESTION_SUBMITTED") || 0,
+      recommendations: eventCounts.get("PRODUCT_RECOMMENDED") || 0,
+      productAdds: eventCounts.get("PRODUCT_ADDED") || 0,
+      profileClicks: eventCounts.get("PROFILE_CTA_CLICKED") || 0,
     },
     conversations: conversations.map((conversation) => ({
       id: conversation.id,
@@ -142,7 +172,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function CaptainAiAdmin() {
-  const { stats, conversations } = useLoaderData<typeof loader>();
+  const { stats, storefront, conversations } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
@@ -159,6 +189,25 @@ export default function CaptainAiAdmin() {
 
   return (
     <s-page heading="Captain AI-beheer">
+      <s-section heading="Webshopfunnel — laatste 24 uur">
+        <s-stack direction="block" gap="base">
+          <s-text>AI-schipperballon getoond: {storefront.tipViewed}</s-text>
+          <s-text>
+            Captain geopend: {storefront.captainOpened} · unieke bezoekers:{" "}
+            {storefront.uniqueOpenedVisitors}
+          </s-text>
+          <s-text>Zoeken via Captain: {storefront.searches}</s-text>
+          <s-text>AI-vragen gesteld: {storefront.questions}</s-text>
+          <s-text>Antwoorden met productadvies: {storefront.recommendations}</s-text>
+          <s-text>Producten via Captain toegevoegd: {storefront.productAdds}</s-text>
+          <s-text>Bootprofiel-CTA aangeklikt: {storefront.profileClicks}</s-text>
+          <s-paragraph>
+            Deze funnel slaat alleen gebeurtenistypen en beperkte pagina-/productcontext op;
+            de inhoud van de klantvraag wordt niet als analytics-event opgeslagen.
+          </s-paragraph>
+        </s-stack>
+      </s-section>
+
       <s-section heading="Overzicht">
         <s-stack direction="block" gap="base">
           <s-text>Gesprekken: {stats.conversations}</s-text>
