@@ -125,6 +125,23 @@ model CaptainMessage {
   @@index([feedback])
 }
 
+model CaptainStorefrontEvent {
+  id           String   @id @default(cuid())
+  shop         String
+  visitorId    String
+  event        String
+  pageUrl      String?
+  pageType     String?
+  productId    String?
+  productTitle String?
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now())
+
+  @@index([shop, createdAt])
+  @@index([shop, event, createdAt])
+  @@index([shop, visitorId, createdAt])
+}
+
 model CaptainCreditBalance {
   shop       String
   customerId String
