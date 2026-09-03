@@ -20,6 +20,28 @@ function shortId(value: string) {
   return end.length > 14 ? `${end.slice(0, 6)}…${end.slice(-6)}` : end;
 }
 
+function readableCaptainMessage(content: string) {
+  try {
+    const answer = JSON.parse(content);
+    if (!answer || typeof answer !== "object" || !answer.summary) return content;
+    const parts = [String(answer.summary).trim()];
+    for (const key of ["safety", "causes", "checks", "solution"]) {
+      if (Array.isArray(answer[key])) {
+        parts.push(
+          ...answer[key]
+            .map(String)
+            .map((item: string) => item.trim())
+            .filter(Boolean),
+        );
+      }
+    }
+    if (answer.follow_up) parts.push(String(answer.follow_up).trim());
+    return parts.filter(Boolean).join("\n\n");
+  } catch {
+    return content;
+  }
+}
+
 async function customerNames(admin: any, ids: string[]) {
   if (!ids.length) return new Map<string, string>();
   try {
@@ -269,7 +291,11 @@ export default function CaptainAiAdmin() {
                         {message.role === "USER" ? "Klant" : "Captain AI"} ·{" "}
                         {new Date(message.createdAt).toLocaleString("nl-NL")}
                       </s-text>
-                      <s-paragraph>{message.content}</s-paragraph>
+                      <s-paragraph>
+                        {message.role === "ASSISTANT"
+                          ? readableCaptainMessage(message.content)
+                          : message.content}
+                      </s-paragraph>
                       {message.feedback === 1 && (
                         <s-text>Feedback: nuttig</s-text>
                       )}
