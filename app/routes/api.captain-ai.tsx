@@ -722,7 +722,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const history = await prisma.captainMessage.findMany({
         where: { conversationId: conversation.id },
         orderBy: { createdAt: "desc" },
-        take: 12,
+        take: 24,
       });
       const serviceEntries = await prisma.serviceBookEntry.findMany({
         where: { shop, customerId, profileId },
