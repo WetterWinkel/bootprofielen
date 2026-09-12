@@ -125,12 +125,23 @@ function latestCustomerQuestion(input: CaptainInput) {
 
 function productOpportunity(input: CaptainInput): ProductOpportunity {
   const question = latestCustomerQuestion(input);
+  const conversation = input.messages
+    .filter((message) => message.role === "USER")
+    .map((message) => message.content)
+    .join("\n");
+  const identifiers =
+    conversation.match(
+      /\b(?=[A-Z0-9-]{5,}\b)(?=[A-Z0-9-]*\d)(?=[A-Z0-9-]*[A-Z])[A-Z0-9-]+\b/gi,
+    ) ?? [];
   const queries = PRODUCT_SEARCH_GROUPS.flatMap((group) =>
     group.pattern.test(question) ? group.queries : [],
   );
   return {
-    matched: queries.length > 0,
-    queries: [...new Set(queries)].slice(0, 8),
+    matched: queries.length > 0 || identifiers.length > 0,
+    queries: [...new Set([...identifiers.slice(-4).reverse(), ...queries])].slice(
+      0,
+      8,
+    ),
   };
 }
 
@@ -152,11 +163,6 @@ function mergeProductSearchResults(
     }
   }
   return merged;
-}
-
-function fallbackProductSelection(products: CaptainProduct[]) {
-  const available = products.filter((product) => product.available);
-  return (available.length ? available : products).slice(0, 4);
 }
 
 function openAIClient() {
@@ -276,14 +282,26 @@ Captain AI is alleen beschikbaar nadat de ingelogde klant een geldig bootprofiel
 BOOTPROFIEL
 ${compact(input.profile?.data || {})}
 
+BEKENDE FEITEN UIT DIT GESPREK
+${compact(
+  input.messages
+    .filter((message) => message.role === "USER")
+    .slice(-20)
+    .map((message) => message.content),
+  8_000,
+)}
+
 DIGITAAL SERVICEBOEK (meest recente regels)
 ${compact(input.serviceEntries.slice(0, 30))}
 
 WERKWIJZE EN BRONNEN
-- Voor actuele of technische feiten mag en moet je web_search gebruiken. Geef controleerbare bronverwijzingen en geef voorkeur aan fabrikanten, officiële handleidingen, normen en gezaghebbende nautische bronnen.
+- Voor actuele of technische feiten mag en moet je web_search gebruiken. Zoek eerst de officiële fabrikant-/werkplaatshandleiding voor exact merk, model, bouwjaar/serie en uitvoering. Gebruik daarna pas andere gezaghebbende bronnen. Geef controleerbare bronverwijzingen.
+- Als een officiële handleiding of fabrikant-PDF beschikbaar is, gebruik die als bron zodat de klant de bronkaart kan openen of downloaden. Noem in het antwoord kort "Handleiding toegevoegd". Verwijs nooit naar een algemene handleidingenzoekpagina wanneer een specifieke handleiding vindbaar is.
 - Als een WetterWinkel-handleidingenbibliotheek beschikbaar is, gebruik file_search voor productspecifieke onderhoudsinformatie.
 - Maak duidelijk onderscheid tussen een feit uit een bron, een berekening en jouw inschatting.
 - Haal merk, model, lengte en andere bruikbare bootgegevens ook uit de actuele vraag. Vraag gegevens die de klant al in de vraag noemt niet opnieuw uit.
+- Behandel feiten uit het Bootprofiel en eerdere klantberichten als reeds bekend. Lees vóór ieder antwoord eerst de bekende feiten hierboven. Vraag merk, model, bouwjaar, vermogen, serienummer, inhoud, toepassing of winkelwagenproduct nooit opnieuw als dit al in het Bootprofiel of een eerder klantbericht staat.
+- Corrigeert of verfijnt de klant een gegeven, dan geldt vanaf dat moment de nieuwste versie. Erken de correctie hooguit één keer en ga direct door met het advies.
 - Geef bij voldoende context meteen een bruikbaar antwoord. Stel maximaal één gerichte vervolgvraag wanneer een ontbrekend gegeven de productmaat of veiligheid echt kan veranderen.
 - Beantwoord precies de gestelde vraag en wijk niet uit naar algemene theorie, denkbare risico's, onderhoudshistorie of andere bootsystemen.
 - Voor landvasten en fenders: controleer ten minste bootlengte en waar relevant breedte, gewicht/verplaatsing en gebruik/ligplaats. Gebruik bij maatadvies bij voorkeur een officiële maattabel van een fabrikant. Geef een bruikbaar voorlopig advies wanneer niet alles bekend is, met één duidelijke controlevoorwaarde.
@@ -310,10 +328,12 @@ MOTOR EN DIGITAAL SERVICEBOEK — BIJ IEDERE MOTOR
 - Benoem het gebruikte motormerk en exacte type. Controleer bij technisch advies waar mogelijk een officiële fabrikant- of werkplaatshandleiding voor precies die motorvariant; gebruik een handleiding van een vergelijkbare motor nooit stilzwijgend alsof die exact past.
 - Vergelijk de huidige motoruren met de laatst geregistreerde beurt en met "volgende beurt (uren/datum)" uit het serviceboek. Meld concreet wat volgens de aanwezige registratie aanstaande of achterstallig lijkt. Verzin geen ontbrekende onderhoudshistorie.
 - Controleer bij olie en vloeistoffen de voorgeschreven viscositeit/spec-specificatie, hoeveelheid en het verschil tussen motor, keerkoppeling en andere systemen. Noem alleen waarden die bij de exacte motorvariant zijn onderbouwd.
+- Bij olieadvies is het vaste beslispad: (1) herken de motor uit Bootprofiel plus gesprek, (2) controleer de exacte fabrieksspecificatie en vulhoeveelheid, (3) zoek op exact SKU/merk/viscositeit in WetterWinkel, (4) geef direct het aantal verpakkingen. Vraag alleen om een serienummer wanneer bouwjaar/uitvoering de uitkomst aantoonbaar kan veranderen en dat serienummer nog niet bekend is.
 - Ontbreken motortype, actuele motoruren of een betrouwbare handleiding, stel dan één gerichte vraag of geef duidelijk aan welke controle nog nodig is. Adviseer de klant om uitgevoerd onderhoud daarna als nieuwe regel in het Digitaal serviceboek vast te leggen.
 
 PRODUCTADVIES — KORT EN VERKOPEND
-- Begin iedere geschiktheidsvraag letterlijk met een duidelijk oordeel: "Ja", "Nee" of "Ja, maar". Geef daarna meteen de hoofdreden.
+- Begin met het concrete koopadvies, bijvoorbeeld "Kies ..." of "Ja, deze past." Gebruik "Ja, maar" uitsluitend wanneer er precies één aantoonbaar beslispunt ontbreekt dat de keuze werkelijk kan veranderen. Begin nooit uit gewoonte met een voorbehoud.
+- Gedraag je als de beste watersportverkoper én ervaren monteur: beslis op basis van fabrikantdata, leg alleen het koopbepalende verschil uit en stuur vriendelijk maar duidelijk naar de beste passende keuze.
 - Gedraag je als een deskundige, eerlijke adviserende verkoper: benoem kort de belangrijkste concrete voordelen van het product en maak duidelijk wat al wel vaststaat.
 - Bij een productvraag zijn summary, eventueel maximaal twee solution-regels en hooguit één follow_up normaal voldoende. Laat causes, checks en safety leeg tenzij de klant daadwerkelijk een storing, defect, schade of onveilige situatie beschrijft.
 - Noem geen theoretisch risico en geef geen waarschuwing om niet te varen zonder concrete aanwijzing voor een bestaand defect of direct gevaar.
@@ -325,7 +345,8 @@ PRODUCTADVIES — KORT EN VERKOPEND
 - Past het bekeken product: bevestig dit duidelijk, benoem kort de voordelen en selecteer het product als klikbare productkaart.
 - Past het bekeken product niet of is een andere uitvoering aantoonbaar beter: zeg in één korte zin waarom, zoek direct in WetterWinkel naar een passend alternatief en selecteer dat alternatief als productkaart. Laat de klant niet achter met alleen een afwijzing of een algemene controlelijst.
 - Is de geschiktheid nog niet definitief maar wel waarschijnlijk: geef een "Ja, maar"-advies, benoem exact het ene ontbrekende beslispunt en toon alleen een product als de resterende onzekerheid geen misleidende aanbeveling oplevert.
-- Als meerdere producten passen, adviseer de beste keuze als eerste en leg het verschil alleen uit wanneer dat de koopbeslissing helpt. Toon maximaal drie echt relevante opties; vul nooit op met zwakke matches.
+- Als meerdere producten aantoonbaar passen, orden ze als: "Voordelig", "Aanbevolen" en "Sterker/premium". Kies "Aanbevolen" als hoofdadvies. Toon maximaal drie echt relevante opties; laat een trede weg als er geen aantoonbaar passende optie voor bestaat en vul nooit op met zwakke matches.
+- Als maar één product past, toon alleen dat product. Als de klant het passende product al in de winkelwagen heeft, bevestig de keuze en hoeveelheid; vraag niet om het opnieuw toe te voegen.
 
 PRODUCTBELEID — ABSOLUUT
 - Je mag overal informatie zoeken, maar je mag uitsluitend concrete koop- of productaanbevelingen doen voor actieve producten die door search_wetterwinkel_products zijn teruggegeven.
@@ -334,10 +355,10 @@ PRODUCTBELEID — ABSOLUUT
 - Noem geen concurrerende winkel, externe verkooplink of extern koopproduct. Een fabrikant of producttype als technische bron mag wel, maar niet als koopadvies.
 - Is er geen geschikt WetterWinkel-product, zeg dan letterlijk dat je in het huidige WetterWinkel-assortiment geen passend product kunt aanbevelen. Geef eventueel neutrale selectiecriteria, zonder externe verkooptip.
 - Controleer pasvorm en specificaties tegen de bootgegevens; doe geen stellige compatibiliteitsclaim als informatie ontbreekt.
-- Zodra de vraag een productkans bevat (zoals olie, filters, impellers, anodes, fenders, landvasten, accu's of omvormers), moet je vóór je eindantwoord WetterWinkel-producten zoeken. Zijn passende kandidaten aanwezig, selecteer dan minimaal één en maximaal vier met select_wetterwinkel_products zodat ze direct als klikbare WetterWinkel-productkaarten verschijnen.
+- Zodra de vraag een productkans bevat (zoals olie, filters, impellers, anodes, fenders, landvasten, accu's of omvormers), moet je vóór je eindantwoord WetterWinkel-producten zoeken. Zoek eerst op ieder genoemd SKU/artikelnummer en daarna op exact merk, model en vereiste specificatie. Selecteer uitsluitend aantoonbaar passende kandidaten, minimaal één en maximaal drie. Een brede categorie-overeenkomst is nooit voldoende.
 - Beschouw ook een vraag over een concreet bekeken of genoemd product als productkans. Zoek dat exacte product eerst op titel, merk, type, SKU of herkenbare modelcode en zoek bij onvoldoende geschiktheid meteen naar het passende alternatief.
 - Geef eerst het technisch juiste advies en toon daarna de passende WetterWinkel-producten. Een productkaart is een aanvulling op, nooit een vervanging van, de technische onderbouwing.
-- Als je één of meer passende producten selecteert, bied dan actief aan om het product in de winkelwagen te plaatsen. Zeg kort: "Zal ik dit product voor u in de winkelwagen plaatsen?" De interface toont hiervoor de veilige winkelwagenknop.
+- Als je één of meer passende producten selecteert en de klant heeft niet gezegd dat ze al in de winkelwagen staan, bied dan actief aan om de aanbevolen keuze in de winkelwagen te plaatsen. Als ze al in de winkelwagen staan, bevestig alleen dat de keuze en hoeveelheid kloppen.
 - Doe nooit alsof een product al is toegevoegd. Toevoegen gebeurt pas nadat de klant de winkelwagenknop bevestigt. Bij meerdere verkoopbare varianten moet de klant eerst de uitvoering kiezen.
 - Gebruik de echte Shopify-varianten om relevante keuzes zoals kleur, spanning, lengte, diameter, maat en uitvoering aan te bieden. Verzin geen variantwaarden en kies niet stilzwijgend voor de klant.
 
@@ -367,8 +388,9 @@ Vul het verplichte gestructureerde antwoord zeer compact in. De structuur is int
 - causes: alleen bij een storing of defect, anders altijd leeg; maximaal drie waarschijnlijke oorzaken.
 - checks: alleen bij een storing, defect of noodzakelijke compatibiliteitscontrole, anders leeg; maximaal drie controles.
 - solution: maximaal twee korte, direct relevante advies- of vervolgstappen.
-- follow_up: maximaal één concrete vervolgvraag, of een lege tekst als geen vraag nodig is.
-- Houd het volledige antwoord bij voorkeur onder 180 woorden. Gebruik geen Markdown, koppen, tabellen, bronlinks of URL's in de velden.
+- follow_up: maximaal één concrete vervolgvraag, uitsluitend wanneer het antwoord zonder dat gegeven wezenlijk kan veranderen; anders leeg.
+- Houd een normale productvraag onder 90 woorden en een technische storing onder 140 woorden. Gebruik geen Markdown, koppen, tabellen, bronlinks of URL's in de velden.
+- Herhaal niet wat de klant al weet. Geen excuses, uitgebreide disclaimers, algemene onderhoudstheorie of controlevragen na een compleet antwoord.
 - Noem WetterWinkel-producten niet als tekstuele winkellijst. Selecteer ze met select_wetterwinkel_products; de interface toont dan klikbare productkaarten.
 - Gebruik metrische eenheden.
 Zeg niet dat je een menselijke monteur of gecertificeerd expert bent.`;
@@ -464,7 +486,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
       type: "function",
       name: "select_wetterwinkel_products",
       description:
-        "Selecteer maximaal vier passende producten uit eerdere WetterWinkel-zoekresultaten. Gebruik uitsluitend exact teruggegeven Shopify-product-ID's.",
+        "Selecteer maximaal drie aantoonbaar passende producten uit eerdere WetterWinkel-zoekresultaten. Gebruik uitsluitend exact teruggegeven Shopify-product-ID's en vul nooit op met brede categorie-overeenkomsten.",
       strict: true,
       parameters: {
         type: "object",
@@ -473,7 +495,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
           product_ids: {
             type: "array",
             items: { type: "string" },
-            maxItems: 4,
+            maxItems: 3,
           },
         },
         required: ["product_ids"],
@@ -482,7 +504,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
   ];
 
   let response: any;
-  let responseInput: any[] = input.messages.slice(-12).map((message) => ({
+  let responseInput: any[] = input.messages.slice(-20).map((message) => ({
     role: message.role === "USER" ? "user" : "assistant",
     content: message.content,
   }));
@@ -544,12 +566,12 @@ export async function answerCaptainQuestion(input: CaptainInput) {
               checks: {
                 type: "array",
                 items: { type: "string" },
-                maxItems: 5,
+                maxItems: 3,
               },
               solution: {
                 type: "array",
                 items: { type: "string" },
-                maxItems: 4,
+                maxItems: 2,
               },
               follow_up: { type: "string" },
             },
@@ -570,7 +592,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
         "web_search_call.action.sources",
         "reasoning.encrypted_content",
       ] as any,
-      max_output_tokens: 1400,
+      max_output_tokens: 900,
       max_tool_calls: 6,
       parallel_tool_calls: false,
       safety_identifier: createHash("sha256")
@@ -617,7 +639,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
 
       if (call.name === "select_wetterwinkel_products") {
         const ids = Array.isArray(args.product_ids)
-          ? args.product_ids.slice(0, 4)
+          ? args.product_ids.slice(0, 3)
           : [];
         selectedProducts = ids.flatMap((id: unknown) => {
           const product = productCandidates.get(String(id));
@@ -647,10 +669,6 @@ export async function answerCaptainQuestion(input: CaptainInput) {
     throw new Error(
       "Captain AI kon nog geen antwoord maken. Probeer de vraag anders te formuleren.",
     );
-
-  if (!selectedProducts.length && opportunity.matched) {
-    selectedProducts = fallbackProductSelection(prefetchedProducts);
-  }
 
   return {
     text,
