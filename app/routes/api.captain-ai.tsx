@@ -7,6 +7,8 @@ import { authenticate, unauthenticated } from "../shopify.server";
 
 const METAFIELD_NAMESPACE = "$app";
 const METAFIELD_KEY = "bootprofielen";
+const OVERVIEW_METAFIELD_NAMESPACE = "custom";
+const OVERVIEW_METAFIELD_KEY = "bootprofielen_overzicht";
 const MAX_MESSAGE_LENGTH = 1_500;
 const MAX_CAPTAIN_IMAGES = 3;
 const MAX_CAPTAIN_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -299,6 +301,11 @@ function customerGid(value: unknown) {
     : `gid://shopify/Customer/${id}`;
 }
 
+function sameCustomerId(left: unknown, right: unknown) {
+  const normalize = (value: unknown) => String(value ?? "").split("/").pop();
+  return Boolean(normalize(left)) && normalize(left) === normalize(right);
+}
+
 async function customerContext(request: Request) {
   const { sessionToken, cors } =
     await authenticate.public.customerAccount(request);
@@ -316,12 +323,23 @@ async function customerContext(request: Request) {
   };
 }
 
-async function ownedProfiles(admin: any, customerId: string) {
+async function ownedProfiles(admin: any, customerId: string): Promise<any[]> {
   const result = await admin.graphql(
     `#graphql
       query CaptainBootprofielen($customerId: ID!) {
         customer(id: $customerId) {
-          metafield(namespace: "${METAFIELD_NAMESPACE}", key: "${METAFIELD_KEY}") {
+          secureProfiles: metafield(namespace: "${METAFIELD_NAMESPACE}", key: "${METAFIELD_KEY}") {
+            references(first: 100) {
+              nodes {
+                ... on Metaobject {
+                  id
+                  type
+                  fields { key value }
+                }
+              }
+            }
+          }
+          overviewProfiles: metafield(namespace: "${OVERVIEW_METAFIELD_NAMESPACE}", key: "${OVERVIEW_METAFIELD_KEY}") {
             references(first: 100) {
               nodes {
                 ... on Metaobject {
@@ -339,12 +357,20 @@ async function ownedProfiles(admin: any, customerId: string) {
   );
   const json: any = await result.json();
   if (json.errors?.length) throw new Error(json.errors[0].message);
-  return (json.data?.customer?.metafield?.references?.nodes ?? []).flatMap(
+  const secureNodes =
+    json.data?.customer?.secureProfiles?.references?.nodes ?? [];
+  const overviewNodes =
+    json.data?.customer?.overviewProfiles?.references?.nodes ?? [];
+  const nodes = [...secureNodes, ...overviewNodes].filter(
+    (node: any, index: number, all: any[]) =>
+      node?.id && all.findIndex((item: any) => item?.id === node.id) === index,
+  );
+  return nodes.flatMap(
     (node: any) => {
       const fields = Object.fromEntries(
         (node.fields ?? []).map((field: any) => [field.key, field.value]),
       );
-      if (fields.klant_id !== customerId) return [];
+      if (!sameCustomerId(fields.klant_id, customerId)) return [];
       let data: Record<string, unknown> = {};
       try {
         data = JSON.parse(fields.data || "{}");
