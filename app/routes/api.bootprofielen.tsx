@@ -41,6 +41,11 @@ function customerGid(value: unknown) {
     : `gid://shopify/Customer/${id}`;
 }
 
+function sameCustomerId(left: unknown, right: unknown) {
+  const normalize = (value: unknown) => String(value ?? "").split("/").pop();
+  return Boolean(normalize(left)) && normalize(left) === normalize(right);
+}
+
 async function context(request: Request) {
   const {sessionToken, cors} =
     await authenticate.public.customerAccount(request);
@@ -118,7 +123,28 @@ async function linkedProfiles(admin: any, customerId: string) {
     `#graphql
       query CustomerBootprofielen($customerId: ID!) {
         customer(id: $customerId) {
-          metafield(namespace: "${METAFIELD_NAMESPACE}", key: "${METAFIELD_KEY}") {
+          secureProfiles: metafield(namespace: "${METAFIELD_NAMESPACE}", key: "${METAFIELD_KEY}") {
+            references(first: 100) {
+              nodes {
+                ... on Metaobject {
+                  id
+                  handle
+                  updatedAt
+                  fields { key value }
+                  photo: field(key: "bootfoto") {
+                    value
+                    reference {
+                      ... on MediaImage {
+                        id
+                        image { url altText }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          overviewProfiles: metafield(namespace: "${OVERVIEW_METAFIELD_NAMESPACE}", key: "${OVERVIEW_METAFIELD_KEY}") {
             references(first: 100) {
               nodes {
                 ... on Metaobject {
@@ -147,7 +173,14 @@ async function linkedProfiles(admin: any, customerId: string) {
   const json: any = await result.json();
   if (json.errors?.length) throw new Error(json.errors[0].message);
 
-  const profiles = (json.data?.customer?.metafield?.references?.nodes ?? []).map(
+  const secureNodes = json.data?.customer?.secureProfiles?.references?.nodes ?? [];
+  const overviewNodes = json.data?.customer?.overviewProfiles?.references?.nodes ?? [];
+  const nodes = [...secureNodes, ...overviewNodes].filter(
+    (node: any, index: number, all: any[]) =>
+      node?.id && all.findIndex((item: any) => item?.id === node.id) === index,
+  );
+
+  const profiles = nodes.map(
     (node: any) => {
       const fields = Object.fromEntries(
         (node.fields ?? []).map((field: any) => [field.key, field.value]),
@@ -172,7 +205,7 @@ async function linkedProfiles(admin: any, customerId: string) {
   );
 
   return profiles
-    .filter((profile: any) => profile.customerId === customerId)
+    .filter((profile: any) => sameCustomerId(profile.customerId, customerId))
     .map((profile: any) => ({
       id: profile.id,
       handle: profile.handle,
