@@ -268,6 +268,8 @@ export function CaptainAi({
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [conversationId, setConversationId] = useState("");
+  const [conversations, setConversations] = useState([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [question, setQuestion] = useState("");
   const [notice, setNotice] = useState("");
@@ -351,7 +353,7 @@ export function CaptainAi({
     return json;
   }
 
-  async function loadConversation() {
+  async function loadConversation(selectedId = "") {
     if (!profileId) return;
     setLoading(true);
     setNotice("");
@@ -359,13 +361,15 @@ export function CaptainAi({
       const json = await request(
         "GET",
         null,
-        `?profileId=${encodeURIComponent(profileId)}`,
+        `?profileId=${encodeURIComponent(profileId)}${selectedId ? `&conversationId=${encodeURIComponent(selectedId)}` : ""}`,
       );
       const conversation = json.conversation;
+      setConversations(json.conversations || []);
       setConversationId(conversation?.id || "");
       setMessages(conversation?.messages || []);
       setConsent(Boolean(conversation?.improvementConsent));
       setUsage(json.usage || null);
+      setHistoryOpen(false);
     } catch (error) {
       setNotice(error.message);
     } finally {
@@ -375,6 +379,8 @@ export function CaptainAi({
 
   useEffect(() => {
     setConversationId("");
+    setConversations([]);
+    setHistoryOpen(false);
     setMessages([]);
     setQuestion("");
     setNotice("");
@@ -489,6 +495,15 @@ export function CaptainAi({
         improvementConsent: consent,
       });
       setConversationId(json.conversation?.id || "");
+      setConversations((current) => [
+        {
+          id: json.conversation?.id,
+          title: json.conversation?.title || "Nieuw gesprek",
+          updatedAt: json.conversation?.updatedAt,
+        },
+        ...current,
+      ]);
+      setHistoryOpen(false);
       setMessages([]);
       setQuestion("");
       setQuestionImages([]);
@@ -513,6 +528,9 @@ export function CaptainAi({
         conversationId,
       });
       setConversationId("");
+      setConversations((current) =>
+        current.filter((item) => item.id !== conversationId),
+      );
       setMessages([]);
       setQuestion("");
       setQuestionImages([]);
@@ -654,6 +672,35 @@ export function CaptainAi({
               checked={consent}
               onChange={(event) => setConsent(event.currentTarget.checked)}
             />
+
+            <s-box padding="small-300" border="base" borderRadius="base">
+              <s-stack gap="small-300">
+                <s-button onClick={() => setHistoryOpen((value) => !value)}>
+                  {historyOpen ? "▲ Gesprekken verbergen" : `☰ Gesprekken (${conversations.length})`}
+                </s-button>
+                {historyOpen && (
+                  <s-stack gap="small-300">
+                    <s-button
+                      onClick={newConversation}
+                      disabled={busy || !profileId}
+                      variant="primary"
+                    >
+                      ＋ Nieuw gesprek
+                    </s-button>
+                    {conversations.map((conversation) => (
+                      <s-button
+                        key={conversation.id}
+                        onClick={() => loadConversation(conversation.id)}
+                        disabled={loading || busy}
+                      >
+                        {conversation.id === conversationId ? "✓ " : ""}
+                        {conversation.title || "Gesprek"}
+                      </s-button>
+                    ))}
+                  </s-stack>
+                )}
+              </s-stack>
+            </s-box>
 
             {loading && <s-text>Gesprek laden...</s-text>}
 
@@ -820,12 +867,6 @@ export function CaptainAi({
             </s-button>
 
             <s-stack direction="inline" gap="small-300">
-              <s-button
-                onClick={newConversation}
-                disabled={busy || !profileId}
-              >
-                Nieuw gesprek
-              </s-button>
               {conversationId && (
                 <s-button
                   onClick={deleteConversation}
