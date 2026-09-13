@@ -68,6 +68,16 @@
       </div>
 
       <div data-captain-chat hidden>
+        <div class="ww-captain__history">
+          <button class="ww-captain__history-toggle" type="button" data-captain-history-toggle aria-expanded="false">
+            <span>☰ Gesprekken</span>
+            <span data-captain-history-count></span>
+          </button>
+          <div class="ww-captain__history-panel" data-captain-history-panel hidden>
+            <button class="ww-captain__new" type="button" data-captain-new>＋ Nieuw gesprek</button>
+            <div class="ww-captain__history-list" data-captain-history-list></div>
+          </div>
+        </div>
         <div class="ww-captain__messages" data-captain-messages aria-live="polite"></div>
         <form class="ww-captain__form" data-captain-form>
           <label>
