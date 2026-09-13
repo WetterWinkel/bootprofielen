@@ -1,5 +1,6 @@
 (function () {
   const TIP_KEY = "ww-captain-tip-v2";
+  const OPEN_KEY = "ww-captain-open-v1";
   const DAY = 24 * 60 * 60 * 1000;
 
   function parseContext(root) {
@@ -95,9 +96,16 @@
     const question = root.querySelector("[data-captain-question]");
     const messages = root.querySelector("[data-captain-messages]");
     const remaining = root.querySelector("[data-captain-remaining]");
+    const historyToggle = root.querySelector("[data-captain-history-toggle]");
+    const historyPanel = root.querySelector("[data-captain-history-panel]");
+    const historyList = root.querySelector("[data-captain-history-list]");
+    const historyCount = root.querySelector("[data-captain-history-count]");
+    const newConversation = root.querySelector("[data-captain-new]");
     const tip = root.querySelector("[data-captain-tip]");
     const tipCopy = root.querySelector("[data-captain-tip-text]");
     let ready = false;
+    let conversationId = "";
+    let conversations = [];
 
     const label = root.querySelector("[data-captain-context-label]");
     if (context.product) label.textContent = "U bekijkt: " + context.product.title;
@@ -112,6 +120,38 @@
         connect();
         setTimeout(() => question.focus(), 50);
       }
+      try { sessionStorage.setItem(OPEN_KEY, value ? "1" : "0"); } catch {}
+    }
+
+    function setHistoryOpen(value) {
+      historyPanel.hidden = !value;
+      historyToggle.setAttribute("aria-expanded", String(value));
+    }
+
+    function renderHistory() {
+      historyCount.textContent = conversations.length ? String(conversations.length) : "";
+      historyList.replaceChildren();
+      conversations.forEach((conversation) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "ww-captain__history-item";
+        if (conversation.id === conversationId) button.classList.add("is-active");
+        button.textContent = conversation.title || "Gesprek";
+        button.addEventListener("click", () => loadConversation(conversation.id));
+        historyList.appendChild(button);
+      });
+    }
+
+    function renderMessages(history) {
+      messages.replaceChildren();
+      (history || []).forEach((message) => {
+        messages.appendChild(messageNode(
+          message.role === "USER" ? "user" : "assistant",
+          message.content,
+          message.products,
+        ));
+      });
+      messages.scrollTop = messages.scrollHeight;
     }
 
     launcher.addEventListener("click", () => setOpen(panel.hidden));
@@ -120,9 +160,49 @@
       tip.hidden = true;
     });
     root.querySelector("[data-captain-tip-open]").addEventListener("click", () => setOpen(true));
+    historyToggle.addEventListener("click", () => setHistoryOpen(historyPanel.hidden));
 
-    async function request(method, body) {
-      const response = await fetch(endpoint, {
+    async function loadConversation(id) {
+      setOpen(true);
+      status.hidden = false;
+      status.textContent = "Gesprek laden…";
+      try {
+        const data = await request("GET", null, id ? "conversation_id=" + encodeURIComponent(id) : "");
+        conversationId = data.conversationId || "";
+        conversations = data.conversations || [];
+        renderHistory();
+        renderMessages(data.history);
+        setHistoryOpen(false);
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        status.hidden = true;
+        setOpen(true);
+      }
+    }
+
+    newConversation.addEventListener("click", async () => {
+      setOpen(true);
+      newConversation.disabled = true;
+      try {
+        const data = await request("POST", { intent: "new_conversation", context });
+        conversationId = data.conversation.id;
+        conversations = [data.conversation, ...conversations];
+        renderMessages([]);
+        renderHistory();
+        setHistoryOpen(false);
+        question.focus();
+      } catch (error) {
+        status.hidden = false;
+        status.textContent = error.message;
+      } finally {
+        newConversation.disabled = false;
+        setOpen(true);
+      }
+    });
+
+    async function request(method, body, query) {
+      const response = await fetch(endpoint + (query ? "?" + query : ""), {
         method,
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -147,7 +227,11 @@
         status.hidden = true;
         gate.hidden = true;
         chat.hidden = false;
-        if (data.profileName) {
+        conversationId = data.conversationId || "";
+        conversations = data.conversations || [];
+        renderHistory();
+        renderMessages(data.history);
+        if (data.profileName && !data.history.length) {
           messages.appendChild(
             messageNode("assistant", JSON.stringify({
               summary: "Ik gebruik uw bootprofiel " + data.profileName + " en de pagina die u nu bekijkt. Waarmee kan ik helpen?",
@@ -170,6 +254,8 @@
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      event.stopPropagation();
+      setOpen(true);
       const value = question.value.trim();
       if (!value) return;
       const button = form.querySelector("button[type=submit]");
@@ -179,7 +265,8 @@
       question.value = "";
       messages.scrollTop = messages.scrollHeight;
       try {
-        const data = await request("POST", { message: value, context });
+        const data = await request("POST", { message: value, context, conversationId });
+        conversationId = data.conversationId || conversationId;
         messages.appendChild(messageNode("assistant", data.message.content, data.message.products));
         if (typeof data.remaining === "number") {
           remaining.textContent = data.remaining + " vragen beschikbaar vandaag";
@@ -194,8 +281,13 @@
         button.textContent = "Vraag stellen";
         messages.scrollTop = messages.scrollHeight;
         question.focus();
+        setOpen(true);
       }
     });
+
+    try {
+      if (sessionStorage.getItem(OPEN_KEY) === "1") setOpen(true);
+    } catch {}
 
     if (root.dataset.tips !== "false") {
       try {
