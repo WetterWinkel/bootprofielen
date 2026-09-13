@@ -410,7 +410,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   if (request.method === "OPTIONS") return response({ success: true });
   try {
     const { admin, cors, shop, customerId } = await customerContext(request);
-    const profileId = new URL(request.url).searchParams.get("profileId") || "";
+    const searchParams = new URL(request.url).searchParams;
+    const profileId = searchParams.get("profileId") || "";
+    const selectedConversationId = searchParams.get("conversationId") || "";
     const profiles = await ownedProfiles(admin, customerId);
     if (!profiles.some((profile: any) => profile.id === profileId)) {
       return cors(
@@ -421,16 +423,30 @@ export async function loader({ request }: LoaderFunctionArgs) {
       );
     }
 
-    const conversation = await prisma.captainConversation.findFirst({
-      where: { shop, customerId, profileId },
+    const conversations = await prisma.captainConversation.findMany({
+      where: { shop, customerId, profileId, channel: "ACCOUNT" },
       orderBy: { updatedAt: "desc" },
-      include: { messages: { orderBy: { createdAt: "asc" }, take: 50 } },
+      take: 30,
     });
+    const selectedConversation = selectedConversationId
+      ? conversations.find((item) => item.id === selectedConversationId)
+      : conversations[0];
+    const conversation = selectedConversation
+      ? await prisma.captainConversation.findUnique({
+          where: { id: selectedConversation.id },
+      include: { messages: { orderBy: { createdAt: "asc" }, take: 50 } },
+        })
+      : null;
     await reconcileCreditPurchases(admin, shop, customerId);
     return cors(
       response({
         success: true,
         usage: await usageSummary(shop, customerId),
+        conversations: conversations.map((item) => ({
+          id: item.id,
+          title: item.title,
+          updatedAt: item.updatedAt.toISOString(),
+        })),
         conversation: conversation
           ? {
               id: conversation.id,
