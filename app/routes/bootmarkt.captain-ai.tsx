@@ -341,7 +341,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       Boolean(profile),
     );
 
-    const recentConversation = await prisma.captainConversation.findFirst({
+    const conversations = await prisma.captainConversation.findMany({
       where: {
         shop,
         customerId,
@@ -349,13 +349,34 @@ export async function loader({ request }: LoaderFunctionArgs) {
         channel: "STOREFRONT",
       },
       orderBy: { updatedAt: "desc" },
+      take: 30,
+      select: { id: true, title: true, updatedAt: true },
+    });
+    const requestedConversationId = new URL(request.url).searchParams.get(
+      "conversation_id",
+    );
+    const activeConversationId = conversations.some(
+      (conversation) => conversation.id === requestedConversationId,
+    )
+      ? requestedConversationId
+      : conversations[0]?.id;
+    const recentConversation = activeConversationId
+      ? await prisma.captainConversation.findFirst({
+          where: {
+            id: activeConversationId,
+            shop,
+            customerId,
+            profileId,
+            channel: "STOREFRONT",
+          },
       include: {
         messages: {
           orderBy: { createdAt: "desc" },
           take: 12,
         },
       },
-    });
+        })
+      : null;
     const history = (recentConversation?.messages || [])
       .slice()
       .reverse()
@@ -378,6 +399,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
       limitReached: currentUsage.remaining <= 0,
       profilePrompt: shouldOfferProfile(currentUsage.used, Boolean(profile)),
       profileUrl: PROFILE_URL,
+      conversationId: recentConversation?.id || "",
+      conversations: conversations.map((conversation) => ({
+        id: conversation.id,
+        title: conversation.title,
+        updatedAt: conversation.updatedAt.toISOString(),
+      })),
       history,
     });
   } catch (error: any) {
@@ -397,6 +424,34 @@ export async function action({ request }: ActionFunctionArgs) {
     const { shop, customerId, shopifyCustomerId, isAnonymous, admin } =
       await storefrontContext(request);
     const body = await request.json();
+    const profiles = shopifyCustomerId
+      ? await ownedProfiles(admin, shopifyCustomerId)
+      : [];
+    const profile =
+      profiles.find((item: any) => item.id === body.profileId) || profiles[0] || null;
+    const profileId = conversationProfileId(profile, isAnonymous);
+
+    if (body.intent === "new_conversation") {
+      const conversation = await prisma.captainConversation.create({
+        data: {
+          shop,
+          customerId,
+          profileId,
+          channel: "STOREFRONT",
+          boatContext: profile?.data || {},
+          title: "Nieuw gesprek",
+        },
+      });
+      return json({
+        success: true,
+        conversation: {
+          id: conversation.id,
+          title: conversation.title,
+          updatedAt: conversation.updatedAt.toISOString(),
+        },
+      });
+    }
+
     const rawMessage = String(body.message || "").trim();
     if (!rawMessage || rawMessage.length > MAX_MESSAGE_LENGTH) {
       return json(
@@ -407,13 +462,6 @@ export async function action({ request }: ActionFunctionArgs) {
         400,
       );
     }
-
-    const profiles = shopifyCustomerId
-      ? await ownedProfiles(admin, shopifyCustomerId)
-      : [];
-    const profile =
-      profiles.find((item: any) => item.id === body.profileId) || profiles[0] || null;
-    const profileId = conversationProfileId(profile, isAnonymous);
     const currentUsage = await usage(
       shop,
       customerId,
@@ -440,6 +488,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     let conversation = await prisma.captainConversation.findFirst({
       where: {
+        ...(body.conversationId ? { id: String(body.conversationId) } : {}),
         shop,
         customerId,
         profileId,
@@ -555,6 +604,7 @@ ${salesFlowText({
       profilePrompt: shouldOfferProfile(usedAfter, Boolean(profile)),
       profileUrl: PROFILE_URL,
       hasProfile: Boolean(profile),
+      conversationId: conversation.id,
       message: {
         id: assistantMessage.id,
         role: assistantMessage.role,
