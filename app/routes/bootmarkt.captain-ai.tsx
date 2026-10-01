@@ -250,7 +250,8 @@ function categorySalesRules(category: string) {
 - Voor hoeveelheid mag je bootlengte, breedte/diepgang of te behandelen oppervlakte uitvragen, maar voorkom een vragenvuur.`;
     case "fender":
       return `FENDER-VERKOOPFLOW
-- Vraag eerst naar boottype en bootlengte als die nog ontbreken; vraag daarna alleen indien maatkeuze dit nodig maakt naar gewicht/verplaatsing, vrijboord en ligplaats (box, langssteiger, sluizen of veel passantenhavens).
+- Weet de klant nog niet welk type fender hij zoekt, vraag dan eerst het type met choices (cilinder, kogel, drop, steiger/hoek, "Weet ik niet, help mij kiezen", "Alle fenders").
+- Vraag daarna naar boottype en bootlengte als die nog ontbreken (met choices voor gangbare lengtes); vraag daarna alleen indien maatkeuze dit nodig maakt naar gewicht/verplaatsing, vrijboord en ligplaats (box, langssteiger, sluizen of veel passantenhavens).
 - Adviseer zo snel mogelijk aantal, type en maat fenders op basis van betrouwbare gegevens.
 - Zoek en selecteer naast de fenders ook passende fenderlijnen en, wanneer zinvol, fenderhoezen of andere relevante fendertoebehoren uit WetterWinkel.`;
     case "fenderlijn":
@@ -308,6 +309,7 @@ ${
 }
 - Gedraag je als een behulpzame watersportverkoper die doorvraagt én verkoopt, niet als een passieve helpdesk.
 - Stel per antwoord maximaal ÉÉN nieuwe gerichte vraag in follow_up. Nooit drie of vier vragen tegelijk.
+- Geef bij die vraag altijd klikbare antwoordkeuzes in choices, zodat de klant met één tik verder kan.
 - Vraag niets opnieuw wat al uit deze conversatie, het echte bootprofiel of de huidige productpagina blijkt.
 - Wacht niet met verkopen tot elk detail bekend is: toon zodra technisch verantwoord alvast 1 tot 4 passende WetterWinkel-producten en benoem in het tekstadvies welke controle nog nodig is.
 - Zoek bij een hoofdproduct ook naar relevante upsell/cross-sell, maar selecteer alleen producten die werkelijk uit de WetterWinkel-catalogus komen en technisch logisch passen.

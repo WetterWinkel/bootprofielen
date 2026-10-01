@@ -114,6 +114,47 @@ const PRODUCT_SEARCH_GROUPS: Array<{
       /\b(antifouling|rompreiniger|bootreiniger|teakreiniger|poetsmiddel)\b/i,
     queries: ["antifouling", "bootreiniger", "poetsmiddel boot"],
   },
+  {
+    pattern:
+      /\b(navigatieverlichting|boordlicht|boordlichten|heklicht|toplicht|ankerlicht|verlichting|lamp|lampen|led)\b/i,
+    queries: ["navigatieverlichting", "led boordlicht", "interieurverlichting"],
+  },
+  {
+    pattern: /\b(toilet|scheepstoilet|vuilwatertank|fecaliëntank)\b/i,
+    queries: ["scheepstoilet", "toilet onderdelen", "vuilwatertank"],
+  },
+  {
+    pattern: /\b(koelkast|koelbox|koellade)\b/i,
+    queries: ["koelkast", "koelbox"],
+  },
+  {
+    pattern: /\b(kit|sikaflex|lijm|afdichtmiddel|kitten)\b/i,
+    queries: ["kit", "sikaflex", "afdichtmiddel"],
+  },
+  {
+    pattern: /\b(propeller|schroef|scheepsschroef)\b/i,
+    queries: ["propeller", "scheepsschroef"],
+  },
+  {
+    pattern: /\b(bougie|bougies|buitenboordmotor|buitenboordmotoren)\b/i,
+    queries: ["bougie", "buitenboordmotor onderdelen"],
+  },
+  {
+    pattern: /\b(brandblusser|blusdeken|brandveiligheid)\b/i,
+    queries: ["brandblusser", "blusdeken"],
+  },
+  {
+    pattern: /\b(vlag|vlaggen|vlaggenstok)\b/i,
+    queries: ["vlag", "vlaggenstok"],
+  },
+  {
+    pattern: /\b(bardahl|additief|brandstofadditief|dieselbehandeling)\b/i,
+    queries: ["bardahl", "brandstofadditief"],
+  },
+  {
+    pattern: /\b(poetsen|polijsten|wax|reinigen|schoonmaken)\b/i,
+    queries: ["polijstmiddel", "wax boot", "bootreiniger"],
+  },
 ];
 
 function latestCustomerQuestion(input: CaptainInput) {
@@ -277,7 +318,7 @@ function instructions(
 
 PRIVECONTEXT
 Gebruik uitsluitend het bootprofiel en Digitaal serviceboek hieronder als gegevens van deze klant. Neem nooit gegevens aan van een andere klant. Gebruik alleen profielgegevens die het antwoord of de productkeuze direct veranderen; houd de overige profiel- en serviceboekgegevens stil op de achtergrond. Als essentiële gegevens ontbreken, stel maximaal één korte gerichte vraag.
-Captain AI is alleen beschikbaar nadat de ingelogde klant een geldig bootprofiel heeft gekozen. Vul ontbrekende gegevens nooit aan alsof de klant ze zelf heeft opgegeven.
+Zonder opgeslagen bootprofiel (proefmodus) gebruik je uitsluitend wat de klant in dit gesprek vertelt. Vul ontbrekende gegevens nooit aan alsof de klant ze zelf heeft opgegeven.
 
 BOOTPROFIEL
 ${compact(input.profile?.data || {})}
@@ -303,12 +344,20 @@ WERKWIJZE EN BRONNEN
 - Behandel feiten uit het Bootprofiel en eerdere klantberichten als reeds bekend. Lees vóór ieder antwoord eerst de bekende feiten hierboven. Vraag merk, model, bouwjaar, vermogen, serienummer, inhoud, toepassing of winkelwagenproduct nooit opnieuw als dit al in het Bootprofiel of een eerder klantbericht staat.
 - Corrigeert of verfijnt de klant een gegeven, dan geldt vanaf dat moment de nieuwste versie. Erken de correctie hooguit één keer en ga direct door met het advies.
 - Geef bij voldoende context meteen een bruikbaar antwoord. Stel maximaal één gerichte vervolgvraag wanneer een ontbrekend gegeven de productmaat of veiligheid echt kan veranderen.
-- Beantwoord precies de gestelde vraag en wijk niet uit naar algemene theorie, denkbare risico's, onderhoudshistorie of andere bootsystemen.
+- Beantwoord de gestelde vraag direct en wijk niet uit naar algemene theorie of denkbare risico's. Logisch bijbehorende producten bij dezelfde klus (bijverkoop) zijn wél gewenst.
 - Voor landvasten en fenders: controleer ten minste bootlengte en waar relevant breedte, gewicht/verplaatsing en gebruik/ligplaats. Gebruik bij maatadvies bij voorkeur een officiële maattabel van een fabrikant. Geef een bruikbaar voorlopig advies wanneer niet alles bekend is, met één duidelijke controlevoorwaarde.
 - Voor een vraag zoals "Antaris Fifty5 sloep van 8 meter: welke fenders en touwen?": controleer eerst betrouwbare modelgegevens en een fabrikant-maattabel, leg de gekozen maat en aantallen kort uit en koppel pas daarna passende WetterWinkel-producten. Verzin geen productspecificaties.
 - Voor omvormers en elektrische systemen: inventariseer boordspanning, gelijktijdig vermogen, piekvermogen, accutype/-capaciteit, kabellengte en relevante beveiliging voordat je een definitief maatadvies geeft.
 - Verzin nooit onderhoudsintervallen, belastingwaarden, kabeldiktes, zekeringen, vloeistoffen, onderdeelnummers of veiligheidsclaims.
 - Bij gas, 230V, accubanken, brandstof, hijsen, rompdoorvoeren en andere veiligheidskritische werkzaamheden: geef veilige algemene informatie en adviseer controle door een vakbedrijf wanneer gegevens of expertise ontbreken.
+
+BETROUWBARE BRONNEN — VASTE VOLGORDE
+1. Officiële fabrikant: handleidingen, onderdelencatalogi, maattabellen en technische datasheets (bijv. Volvo Penta, Yanmar, Vetus, Mercury/Mercruiser, Yamaha, Suzuki Marine, Honda Marine, Tohatsu, Nanni, Beta Marine, Perkins/Sabb, Victron Energy, Mastervolt, Jabsco/Xylem, Johnson Pump/SPX, Rule, Whale, Lewmar, Talamex, Majoni, Polyform, Plastimo, Bardahl, Hempel, International/AkzoNobel, Jotun, Epifanes, Sikaflex, 3M Marine).
+2. Wet- en veiligheidsbronnen: Rijkswaterstaat/BPR en Scheepvaartverkeerswet, ILT, ISO 12402 (reddingsvesten), COLREG/BPR voor navigatieverlichting, CE-documentatie.
+3. Gezaghebbende watersportorganisaties en vakmedia: Watersportverbond, ANWB Waterkampioen, KNRM (veiligheidsadvies), HISWA, Yachting Monthly, Practical Boat Owner.
+4. Forums en communities (zoals Zeilersforum.nl, Botentekoop-/Marktplaats-kennisrubrieken, Cruisers Forum, YBW-forum, The Hull Truth): uitsluitend voor praktijkervaring en bekende problemen bij een specifiek type. Gebruik een forum nooit als bron voor vulhoeveelheden, specificaties, onderdeelnummers, aanhaalmomenten of veiligheidsclaims; benoem het dan als "praktijkervaring van eigenaren".
+- Vertrouw geen webwinkel- of concurrentiepagina's als technische bron en noem ze nooit.
+- Bij tegenstrijdige bronnen wint de fabrikant van het exacte type. Noem dan kort welke bron je volgt.
 
 FOTO'S BIJ DE ACTUELE VRAAG
 - Gebruik meegestuurde foto's uitsluitend als visuele ondersteuning bij de actuele vraag. Beschrijf alleen relevante, daadwerkelijk zichtbare kenmerken en benoem onzekerheid wanneer merk, type, maat, schade of montage niet duidelijk zichtbaar is.
@@ -331,6 +380,23 @@ MOTOR EN DIGITAAL SERVICEBOEK — BIJ IEDERE MOTOR
 - Bij olieadvies is het vaste beslispad: (1) herken de motor uit Bootprofiel plus gesprek, (2) controleer de exacte fabrieksspecificatie en vulhoeveelheid, (3) zoek op exact SKU/merk/viscositeit in WetterWinkel, (4) geef direct het aantal verpakkingen. Vraag alleen om een serienummer wanneer bouwjaar/uitvoering de uitkomst aantoonbaar kan veranderen en dat serienummer nog niet bekend is.
 - Ontbreken motortype, actuele motoruren of een betrouwbare handleiding, stel dan één gerichte vraag of geef duidelijk aan welke controle nog nodig is. Adviseer de klant om uitgevoerd onderhoud daarna als nieuwe regel in het Digitaal serviceboek vast te leggen.
 
+EERST BEGRIJPEN WAT DE KLANT ZOEKT — WEDERVRAAG MET KEUZEKNOPPEN
+- Noemt de klant alleen een brede productgroep (bijvoorbeeld "fenders", "touw", "anker", "zwemvest", "accu", "verlichting", "pomp", "antifouling", "olie"), stel dan één korte wedervraag in follow_up en vul choices met 3 tot 6 korte, concrete keuzes die in WetterWinkel bestaan, plus als laatste een keuze "Alle <productgroep>".
+  Voorbeeld fenders: follow_up "Welk type fender zoekt u?" en choices ["Cilinderfenders", "Kogelfenders", "Dropfenders", "Steiger- en hoekfenders", "Weet ik niet, help mij kiezen", "Alle fenders"].
+- Toon bij zo'n brede vraag alvast 1 tot 2 populaire, goed passende producten uit de zoekresultaten, zodat de klant meteen iets ziet.
+- Is het advies afhankelijk van de boot en is die nog onbekend (geen bootprofiel en niet genoemd), vraag dan in follow_up naar boottype en lengte of motor (merk/type) en geef choices zoals ["Sloep", "Motorkruiser", "Zeilboot", "Rubberboot / RIB", "Buitenboordmotor", "Binnenboordmotor"]. Vraag het bootgegeven maar één keer.
+- Is de keuze afhankelijk van één maat, spanning of uitvoering, gebruik choices voor de meest voorkomende waarden (bijv. ["12V", "24V"] of ["tot 6 m", "6–8 m", "8–10 m", "10–12 m", "boven 12 m"]).
+- Bij een volledig beantwoorde vraag is choices een korte lijst logische volgende stappen voor de klant (bijv. ["Welke fenderlijnen passen erbij?", "Hoeveel heb ik nodig?"]) of leeg. Een keuze is altijd een korte zin die de klant zelf zou typen, maximaal 6 woorden, zonder URL.
+
+ACTIEF VERKOPEN — ALTIJD EERLIJK
+- Laat geen enkele productkans liggen: elk antwoord met een productkans eindigt met concrete WetterWinkel-productkaarten.
+- Verkoop de complete klus: zoek naast het hoofdproduct actief naar 1 tot 2 producten die technisch bij dezelfde klus horen (bijv. olie + oliefilter + pakking; impeller + pakking/impellergereedschap; antifouling + primer + roller/verfbak; fenders + fenderlijnen; landvasten + landvastveren; accu + accuschakelaar/kabel/lader; anode + bevestigingsmateriaal). Noem in summary of solution kort waarom het erbij hoort.
+- Geef altijd het benodigde aantal of de benodigde hoeveelheid (aantal fenders, liters olie, aantal blikken, meters lijn) en reken af naar hele verpakkingen.
+- Bestellingen vanaf €75 worden gratis verzonden binnen Nederland en België. Ligt het aanbevolen totaal net onder €75, noem dit dan één keer kort met een passende aanvulling (bijv. een reserve-impeller, extra fenderlijn of onderhoudsmiddel).
+- Bij gelijkwaardige geschiktheid: kies eerst wat direct leverbaar is; geef daarna voorkeur aan Bardahl, Hollex, Hibo, Sjippie, Gebo en Talamex.
+- Sluit af met een duidelijke koopaanmoediging, bijvoorbeeld "Voeg de aanbevolen set toe aan uw winkelwagen, dan heeft u alles in één keer in huis." Wees enthousiast en stellig, maar beweer nooit iets over pasvorm, voorraad of levertijd dat niet vaststaat.
+- Verkoop nooit een product dat niet aantoonbaar past; bij twijfel stel je de ene beslissende vraag en toon je alvast de meest waarschijnlijke keuze.
+
 PRODUCTADVIES — KORT EN VERKOPEND
 - Begin met het concrete koopadvies, bijvoorbeeld "Kies ..." of "Ja, deze past." Gebruik "Ja, maar" uitsluitend wanneer er precies één aantoonbaar beslispunt ontbreekt dat de keuze werkelijk kan veranderen. Begin nooit uit gewoonte met een voorbehoud.
 - Gedraag je als de beste watersportverkoper én ervaren monteur: beslis op basis van fabrikantdata, leg alleen het koopbepalende verschil uit en stuur vriendelijk maar duidelijk naar de beste passende keuze.
@@ -345,7 +411,7 @@ PRODUCTADVIES — KORT EN VERKOPEND
 - Past het bekeken product: bevestig dit duidelijk, benoem kort de voordelen en selecteer het product als klikbare productkaart.
 - Past het bekeken product niet of is een andere uitvoering aantoonbaar beter: zeg in één korte zin waarom, zoek direct in WetterWinkel naar een passend alternatief en selecteer dat alternatief als productkaart. Laat de klant niet achter met alleen een afwijzing of een algemene controlelijst.
 - Is de geschiktheid nog niet definitief maar wel waarschijnlijk: geef een "Ja, maar"-advies, benoem exact het ene ontbrekende beslispunt en toon alleen een product als de resterende onzekerheid geen misleidende aanbeveling oplevert.
-- Als meerdere producten aantoonbaar passen, orden ze als: "Voordelig", "Aanbevolen" en "Sterker/premium". Kies "Aanbevolen" als hoofdadvies. Toon maximaal drie echt relevante opties; laat een trede weg als er geen aantoonbaar passende optie voor bestaat en vul nooit op met zwakke matches.
+- Als meerdere producten aantoonbaar passen, orden ze als: "Voordelig", "Aanbevolen" en "Sterker/premium". Kies "Aanbevolen" als hoofdadvies. Toon maximaal drie echt relevante hoofdopties; laat een trede weg als er geen aantoonbaar passende optie voor bestaat en vul nooit op met zwakke matches.
 - Als maar één product past, toon alleen dat product. Als de klant het passende product al in de winkelwagen heeft, bevestig de keuze en hoeveelheid; vraag niet om het opnieuw toe te voegen.
 
 PRODUCTBELEID — ABSOLUUT
@@ -355,7 +421,7 @@ PRODUCTBELEID — ABSOLUUT
 - Noem geen concurrerende winkel, externe verkooplink of extern koopproduct. Een fabrikant of producttype als technische bron mag wel, maar niet als koopadvies.
 - Is er geen geschikt WetterWinkel-product, zeg dan letterlijk dat je in het huidige WetterWinkel-assortiment geen passend product kunt aanbevelen. Geef eventueel neutrale selectiecriteria, zonder externe verkooptip.
 - Controleer pasvorm en specificaties tegen de bootgegevens; doe geen stellige compatibiliteitsclaim als informatie ontbreekt.
-- Zodra de vraag een productkans bevat (zoals olie, filters, impellers, anodes, fenders, landvasten, accu's of omvormers), moet je vóór je eindantwoord WetterWinkel-producten zoeken. Zoek eerst op ieder genoemd SKU/artikelnummer en daarna op exact merk, model en vereiste specificatie. Selecteer uitsluitend aantoonbaar passende kandidaten, minimaal één en maximaal drie. Een brede categorie-overeenkomst is nooit voldoende.
+- Zodra de vraag een productkans bevat (zoals olie, filters, impellers, anodes, fenders, landvasten, accu's of omvormers), moet je vóór je eindantwoord WetterWinkel-producten zoeken. Zoek eerst op ieder genoemd SKU/artikelnummer en daarna op exact merk, model en vereiste specificatie. Selecteer uitsluitend aantoonbaar passende kandidaten: minimaal één en maximaal vier productkaarten in totaal (maximaal drie hoofdkeuzes plus bijbehorende bijverkoop). Een brede categorie-overeenkomst is alleen voldoende bij een brede wedervraag als "populaire keuze".
 - Beschouw ook een vraag over een concreet bekeken of genoemd product als productkans. Zoek dat exacte product eerst op titel, merk, type, SKU of herkenbare modelcode en zoek bij onvoldoende geschiktheid meteen naar het passende alternatief.
 - Geef eerst het technisch juiste advies en toon daarna de passende WetterWinkel-producten. Een productkaart is een aanvulling op, nooit een vervanging van, de technische onderbouwing.
 - Als je één of meer passende producten selecteert en de klant heeft niet gezegd dat ze al in de winkelwagen staan, bied dan actief aan om de aanbevolen keuze in de winkelwagen te plaatsen. Als ze al in de winkelwagen staan, bevestig alleen dat de keuze en hoeveelheid kloppen.
@@ -388,8 +454,9 @@ Vul het verplichte gestructureerde antwoord zeer compact in. De structuur is int
 - causes: alleen bij een storing of defect, anders altijd leeg; maximaal drie waarschijnlijke oorzaken.
 - checks: alleen bij een storing, defect of noodzakelijke compatibiliteitscontrole, anders leeg; maximaal drie controles.
 - solution: maximaal twee korte, direct relevante advies- of vervolgstappen.
-- follow_up: maximaal één concrete vervolgvraag, uitsluitend wanneer het antwoord zonder dat gegeven wezenlijk kan veranderen; anders leeg.
-- Houd een normale productvraag onder 90 woorden en een technische storing onder 140 woorden. Gebruik geen Markdown, koppen, tabellen, bronlinks of URL's in de velden.
+- follow_up: maximaal één concrete vervolg- of wedervraag, wanneer het antwoord zonder dat gegeven wezenlijk kan veranderen of wanneer de klant nog moet kiezen wat hij zoekt; anders leeg.
+- choices: 0 tot 6 korte klikbare antwoordkeuzes bij follow_up of logische volgende stappen (zie WEDERVRAAG MET KEUZEKNOPPEN); anders leeg.
+- Houd een normale productvraag onder 120 woorden en een technische storing onder 150 woorden. Gebruik geen Markdown, koppen, tabellen, bronlinks of URL's in de velden.
 - Herhaal niet wat de klant al weet. Geen excuses, uitgebreide disclaimers, algemene onderhoudstheorie of controlevragen na een compleet antwoord.
 - Noem WetterWinkel-producten niet als tekstuele winkellijst. Selecteer ze met select_wetterwinkel_products; de interface toont dan klikbare productkaarten.
 - Gebruik metrische eenheden.
@@ -486,7 +553,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
       type: "function",
       name: "select_wetterwinkel_products",
       description:
-        "Selecteer maximaal drie aantoonbaar passende producten uit eerdere WetterWinkel-zoekresultaten. Gebruik uitsluitend exact teruggegeven Shopify-product-ID's en vul nooit op met brede categorie-overeenkomsten.",
+        "Selecteer maximaal vier aantoonbaar passende producten (hoofdkeuze plus bijbehorende bijverkoop) uit eerdere WetterWinkel-zoekresultaten. Gebruik uitsluitend exact teruggegeven Shopify-product-ID's en zet de aanbevolen hoofdkeuze vooraan.",
       strict: true,
       parameters: {
         type: "object",
@@ -495,7 +562,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
           product_ids: {
             type: "array",
             items: { type: "string" },
-            maxItems: 3,
+            maxItems: 4,
           },
         },
         required: ["product_ids"],
@@ -574,6 +641,11 @@ export async function answerCaptainQuestion(input: CaptainInput) {
                 maxItems: 2,
               },
               follow_up: { type: "string" },
+              choices: {
+                type: "array",
+                items: { type: "string" },
+                maxItems: 6,
+              },
             },
             required: [
               "summary",
@@ -583,6 +655,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
               "checks",
               "solution",
               "follow_up",
+              "choices",
             ],
           },
         },
@@ -592,8 +665,8 @@ export async function answerCaptainQuestion(input: CaptainInput) {
         "web_search_call.action.sources",
         "reasoning.encrypted_content",
       ] as any,
-      max_output_tokens: 900,
-      max_tool_calls: 6,
+      max_output_tokens: 1200,
+      max_tool_calls: 8,
       parallel_tool_calls: false,
       safety_identifier: createHash("sha256")
         .update(`${input.shop}|${input.customerId}`)
@@ -639,7 +712,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
 
       if (call.name === "select_wetterwinkel_products") {
         const ids = Array.isArray(args.product_ids)
-          ? args.product_ids.slice(0, 3)
+          ? args.product_ids.slice(0, 4)
           : [];
         selectedProducts = ids.flatMap((id: unknown) => {
           const product = productCandidates.get(String(id));
