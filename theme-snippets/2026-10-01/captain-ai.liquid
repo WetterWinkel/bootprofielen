@@ -1,0 +1,119 @@
+{{ 'captain-ai-v3.css' | asset_url | stylesheet_tag }}
+<style>.ww-captain{z-index:900!important}@media (max-width:600px){.ww-captain{bottom:14px}}</style>
+{%- assign ww_captain_avatar = 'captain-ai-avatar.webp' | asset_url -%}
+<div
+  class="ww-captain"
+  data-ww-captain
+  data-nosnippet
+  data-endpoint="/apps/bootmarkt/captain-ai"
+  data-tips="false"
+  data-account-url="/customer_authentication/redirect?locale=nl&amp;region_country=NL"
+  data-search-url="{{ routes.search_url }}"
+  data-image="{{ ww_captain_avatar }}"
+>
+  <script type="application/json" data-captain-context>
+    {
+      "pageType": {{ request.page_type | json }},
+      "url": {{ canonical_url | json }},
+      "product": {% if product %}{
+        "id": {{ product.id | json }},
+        "title": {{ product.title | json }},
+        "handle": {{ product.handle | json }},
+        "url": {{ product.url | json }},
+        "vendor": {{ product.vendor | json }},
+        "type": {{ product.type | json }},
+        "description": {{ product.description | strip_html | truncate: 1800 | json }},
+        "price": {{ product.selected_or_first_available_variant.price | money_with_currency | json }},
+        "available": {{ product.available | json }},
+        "variantId": {{ product.selected_or_first_available_variant.id | json }},
+        "variantTitle": {{ product.selected_or_first_available_variant.title | json }},
+        "sku": {{ product.selected_or_first_available_variant.sku | json }},
+        "image": {{ product.featured_image | image_url: width: 900 | json }},
+        "tags": {{ product.tags | json }},
+        "variants": {{ product.variants | json }}
+      }{% else %}null{% endif %},
+      "collection": {% if collection %}{
+        "id": {{ collection.id | json }},
+        "title": {{ collection.title | json }},
+        "handle": {{ collection.handle | json }},
+        "url": {{ collection.url | json }}
+      }{% else %}null{% endif %},
+      "customer": {% if customer %}true{% else %}false{% endif %}
+    }
+  </script>
+
+  <aside class="ww-captain__tip" data-captain-tip hidden>
+    <button type="button" class="ww-captain__tip-close" data-captain-tip-close aria-label="Tip sluiten">×</button>
+    <button type="button" class="ww-captain__tip-body" data-captain-tip-open>
+      <strong>AI-schipper!</strong>
+      <span data-captain-tip-text>Waarmee kan ik je helpen?</span>
+    </button>
+  </aside>
+
+  <button class="ww-captain__launcher" type="button" data-captain-open aria-expanded="false" aria-label="Open Captain AI, de AI-schipper van WetterWinkel">
+    <img src="{{ ww_captain_avatar }}" alt="" width="52" height="52" loading="lazy">
+    <span>Vraag Captain AI</span>
+  </button>
+
+  <section class="ww-captain__panel" data-captain-panel hidden aria-label="Captain AI" role="dialog" aria-modal="false">
+    <header class="ww-captain__header">
+      <img src="{{ ww_captain_avatar }}" alt="Captain AI van WetterWinkel" width="56" height="56" loading="lazy">
+      <div>
+        <strong>Captain AI</strong>
+        <span>Je AI-schipper bij WetterWinkel</span>
+      </div>
+      <button type="button" class="ww-captain__home" data-captain-home aria-label="Terug naar het menu" title="Menu" hidden>☰</button>
+      <button type="button" class="ww-captain__close" data-captain-close aria-label="Captain AI minimaliseren" title="Chat minimaliseren">−</button>
+    </header>
+
+    <div class="ww-captain__body">
+      <p class="ww-captain__context" data-captain-context-label></p>
+
+      <div class="ww-captain__navigator" data-captain-navigator>
+        <div class="ww-captain__welcome">
+          <strong data-captain-welcome-title>Ahoy! Waarmee kan ik je helpen?</strong>
+          <p data-captain-welcome-copy>Kies hieronder of typ gewoon wat je zoekt.</p>
+        </div>
+
+        <div class="ww-captain__menu" data-captain-menu></div>
+
+        <form class="ww-captain__shop-search" data-captain-shop-search role="search">
+          <label for="captain-shop-search">Wat zoek je voor je boot?</label>
+          <div>
+            <input id="captain-shop-search" data-captain-shop-search-input type="search" autocomplete="off" placeholder="Bijv. fenders, impeller, antifouling…">
+            <button type="submit">Zoek →</button>
+          </div>
+        </form>
+
+        <div class="ww-captain__finder" data-captain-finder hidden></div>
+      </div>
+
+      <div class="ww-captain__status" data-captain-status hidden>Captain AI wordt verbonden…</div>
+
+      <div class="ww-captain__gate" data-captain-gate hidden>
+        <strong>Maak Captain AI persoonlijk</strong>
+        <p data-captain-gate-text>Maak gratis een account en vul je bootprofiel in. Daarna gebruikt Captain AI je bootgegevens voor persoonlijk onderhouds- en productadvies.</p>
+        <a href="/customer_authentication/redirect?locale=nl&amp;region_country=NL" class="ww-captain__primary">Maak mijn bootprofiel aan</a>
+      </div>
+
+      <div data-captain-chat hidden>
+        <div class="ww-captain__messages" data-captain-messages aria-live="polite"></div>
+        <form class="ww-captain__form" data-captain-form>
+          <label>
+            Je vraag aan Captain AI
+            <textarea data-captain-question maxlength="1500" rows="2" placeholder="Bijv. welke impeller past op mijn Volvo Penta MD2020?" required></textarea>
+          </label>
+          <button class="ww-captain__send" type="submit">Vraag stellen</button>
+          <p class="ww-captain__remaining" data-captain-remaining></p>
+        </form>
+      </div>
+
+      <p class="ww-captain__privacy">
+        Liever iemand spreken? <a href="tel:+31513241911">Bel 0513-241911</a> (ma–vr 9–17 uur).
+        Advies is ondersteunend; controleer veiligheidskritische werkzaamheden met de handleiding of een vakbedrijf.
+        <a href="/policies/privacy-policy">Privacy</a>
+      </p>
+    </div>
+  </section>
+</div>
+<script src="{{ 'ww-menu-fix.js' | asset_url }}" defer></script>
