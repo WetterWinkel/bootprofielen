@@ -498,8 +498,9 @@ function responseSources(responses: any[]): CaptainSource[] {
     }
   }
   // Eerst de bronnen die echt geciteerd zijn, daarna (zo nodig) de doorzochte pagina's.
-  for (const src of searched) {
-    if (sources.size >= 6) break;
+  const hadCitations = sources.size > 0;
+  for (const src of hadCitations ? [] : searched) {
+    if (sources.size >= 2) break;
     if (src.url && !sources.has(src.url)) sources.set(src.url, src);
   }
   return [...sources.values()].slice(0, 10);
