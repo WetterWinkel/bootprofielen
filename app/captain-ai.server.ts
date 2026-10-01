@@ -602,9 +602,10 @@ export async function answerCaptainQuestion(input: CaptainInput) {
     }
   }
 
-  const createResponse = () =>
+  const createResponse = (final = false) =>
     client.responses.create({
       model,
+      ...(final ? { tool_choice: "none" } : {}),
       instructions: instructions(input, prefetchedProducts, opportunity),
       input: responseInput as any,
       tools,
@@ -667,7 +668,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
         "web_search_call.action.sources",
         "reasoning.encrypted_content",
       ] as any,
-      max_output_tokens: 1200,
+      max_output_tokens: 2400,
       max_tool_calls: 8,
       parallel_tool_calls: false,
       safety_identifier: createHash("sha256")
@@ -677,7 +678,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
     } as any);
 
   response = await createResponse();
-  for (let round = 0; round < 4; round += 1) {
+  for (let round = 0; round < 6; round += 1) {
     const calls = (response.output ?? []).filter(
       (item: any) => item.type === "function_call",
     );
@@ -739,7 +740,28 @@ export async function answerCaptainQuestion(input: CaptainInput) {
     response = await createResponse();
   }
 
-  const text = String(response.output_text || "").trim();
+  let text = String(response.output_text || "").trim();
+  if (!text) {
+    // Geen eindtekst (tool-limiet of tokenlimiet): laat het model afronden zonder nieuwe tools.
+    const pending = (response.output ?? []).filter(
+      (item: any) => item.type === "function_call",
+    );
+    responseInput = [
+      ...responseInput,
+      ...(response.output ?? []),
+      ...pending.map((call: any) => ({
+        type: "function_call_output",
+        call_id: call.call_id,
+        output: JSON.stringify({ error: "Zoeklimiet bereikt; rond nu af met wat je weet." }),
+      })),
+    ];
+    try {
+      response = await createResponse(true);
+      text = String(response.output_text || "").trim();
+    } catch (error) {
+      console.error("Captain AI afrondpoging mislukt", error);
+    }
+  }
   if (!text)
     throw new Error(
       "Captain AI kon nog geen antwoord maken. Probeer de vraag anders te formuleren.",
