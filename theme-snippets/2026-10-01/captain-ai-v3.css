@@ -85,3 +85,9 @@
 }
 @media (min-width:981px){.ww-acc-all{display:none!important}}
 .ww-product-back{font-size:15px!important}
+
+/* vraag over dit product of iets anders */
+.ww-captain__focus{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px;font-size:12px;color:#5a7287}
+.ww-captain__focus[hidden]{display:none!important}
+.ww-captain__focus button{padding:5px 10px;border:1px solid #b9d3e5;border-radius:999px;background:#fff;color:#075eaa;font:inherit;font-size:12px;font-weight:750;cursor:pointer}
+.ww-captain__focus button.is-active{background:#0a74c9;border-color:#0a74c9;color:#fff}

@@ -203,16 +203,17 @@ function pageContextText(context: Record<string, any>) {
     return `HUIDIGE WEBSHOPPAGINA
 De klant bekijkt nu dit WetterWinkel-product:
 ${JSON.stringify(context.product, null, 2)}
-Gebruik dit als verkoop- en toepassingscontext. Verzin geen ontbrekende variant- of productspecificaties.`;
+De klant heeft aangegeven dat de vraag over DIT product gaat. Gebruik het als verkoop- en toepassingscontext. Verzin geen ontbrekende variant- of productspecificaties.`;
   }
   if (context.collection) {
     return `HUIDIGE WEBSHOPPAGINA
 De klant bekijkt nu de WetterWinkel-collectie:
 ${JSON.stringify(context.collection, null, 2)}
-Gebruik dit als verkoop- en toepassingscontext.`;
+De klant heeft aangegeven dat de vraag over DEZE categorie gaat. Gebruik het als verkoop- en toepassingscontext.`;
   }
   return `HUIDIGE WEBSHOPPAGINA
-Pagina: ${String(context.url || "WetterWinkel")}`;
+Pagina: ${String(context.url || "WetterWinkel")}
+De vraag gaat NIET over het product of de categorie op deze pagina. Negeer de pagina volledig en beantwoord alleen de vraag van de klant.`;
 }
 
 function detectSalesCategory(message: string, context: Record<string, any>) {

@@ -215,6 +215,10 @@
     var label = root.querySelector("[data-captain-context-label]");
     var ready = false;
     var locked = false;
+    var hasPage = !!(context.product || context.collection);
+    var pageTitle = context.product ? context.product.title : (context.collection ? context.collection.title : "");
+    var about = hasPage ? null : "other";
+    var pendingQuestion = "";
 
     if (context.product) label.textContent = "Je bekijkt: " + context.product.title;
     else if (context.collection) label.textContent = "Je bekijkt: " + context.collection.title;
@@ -295,13 +299,13 @@
       if (context.product) {
         var t = context.product.title;
         menu.appendChild(group("Over dit product"));
-        menu.appendChild(item("✅", "Past dit op mijn boot?", "Ik check het voor je", function () { ask("Past " + t + " op mijn boot? Vraag gerust wat je van mijn boot moet weten."); }));
-        menu.appendChild(item("🧰", "Wat heb ik er nog bij nodig?", "Complete set voor de klus", function () { ask("Wat heb ik nog meer nodig bij " + t + " om de klus in één keer goed te doen?"); }));
-        menu.appendChild(item("📏", "Welke maat of uitvoering kies ik?", "Advies op maat", function () { ask("Welke maat of uitvoering van " + t + " moet ik kiezen?"); }));
+        menu.appendChild(item("✅", "Past dit op mijn boot?", "Ik check het voor je", function () { askAbout("product", "Past " + t + " op mijn boot? Vraag gerust wat je van mijn boot moet weten."); }));
+        menu.appendChild(item("🧰", "Wat heb ik er nog bij nodig?", "Complete set voor de klus", function () { askAbout("product", "Wat heb ik nog meer nodig bij " + t + " om de klus in één keer goed te doen?"); }));
+        menu.appendChild(item("📏", "Welke maat of uitvoering kies ik?", "Advies op maat", function () { askAbout("product", "Welke maat of uitvoering van " + t + " moet ik kiezen?"); }));
         menu.appendChild(group("Of iets anders"));
       } else if (context.collection) {
         var ct = context.collection.title;
-        menu.appendChild(item("🧭", "Help mij kiezen", "Binnen " + ct, function () { ask("Help mij kiezen binnen " + ct + ". Wat moet ik weten?"); }));
+        menu.appendChild(item("🧭", "Help mij kiezen", "Binnen " + ct, function () { askAbout("product", "Help mij kiezen binnen " + ct + ". Wat moet ik weten?"); }));
       }
       menu.appendChild(item("🔎", "Producten zoeken", "Snel naar de juiste categorie", openFinderHome));
       menu.appendChild(item("🛠️", "Boot onderhoud", "Motor, winterklaar, antifouling", openMaintenance));
@@ -333,7 +337,7 @@
       finderShow('<strong class="ww-captain__finder-q">' + esc(cat.q) + "</strong>" + linkChipsHtml(cat.opts) +
         '<button type="button" class="ww-captain__ask" data-captain-cat-ask>🧭 Weet je het niet? Laat Captain adviseren</button>');
       finder.querySelector("[data-captain-cat-ask]").onclick = function () {
-        ask("Ik zoek " + (typed || cat.label) + ". Welke past het beste bij mijn boot?");
+        askAbout("other", "Ik zoek " + (typed || cat.label) + ". Welke past het beste bij mijn boot?");
       };
     }
     function openMaintenance() {
@@ -356,7 +360,7 @@
         return;
       }
       var a = e.target.closest("[data-captain-ask]");
-      if (a) ask(a.dataset.captainAsk);
+      if (a) askAbout("other", a.dataset.captainAsk);
     });
 
     searchForm.addEventListener("submit", function (e) {
@@ -439,6 +443,33 @@
       });
     }
 
+    /* ----- waar gaat de vraag over: dit product of iets anders ----- */
+    var focusBar = document.createElement("div");
+    focusBar.className = "ww-captain__focus";
+    chat.insertBefore(focusBar, form);
+    function renderFocus() {
+      if (!hasPage) { focusBar.hidden = true; return; }
+      focusBar.hidden = false;
+      focusBar.innerHTML = "<span>Je vraag gaat over:</span>" +
+        '<button type="button" data-captain-focus="product" class="' + (about === "product" ? "is-active" : "") + '">' + esc(context.product ? "Dit product" : "Deze categorie") + "</button>" +
+        '<button type="button" data-captain-focus="other" class="' + (about === "other" ? "is-active" : "") + '">Iets anders</button>';
+      focusBar.title = pageTitle;
+    }
+    focusBar.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-captain-focus]");
+      if (!b) return;
+      about = b.dataset.captainFocus;
+      renderFocus();
+      if (pendingQuestion) { var q = pendingQuestion; pendingQuestion = ""; pendingShown = true; send(q, true); }
+    });
+    renderFocus();
+
+    function askAbout(which, text) {
+      about = which;
+      renderFocus();
+      ask(text);
+    }
+
     function ask(text) {
       if (panel.hidden) setOpen(true);
       showChat();
@@ -448,6 +479,16 @@
     function send(value, force) {
       value = String(value || "").trim();
       if (!value || locked) return;
+      if (hasPage && !about) {
+        pendingQuestion = value;
+        messages.appendChild(messageNode("user", value));
+        var q = "<p>Gaat je vraag over <b>" + esc(pageTitle) + "</b> of over iets anders?</p>" +
+          '<div class="ww-captain__choices"><button type="button" class="ww-captain__chip" data-captain-pick="product">Over ' + esc(context.product ? "dit product" : "deze categorie") + '</button>' +
+          '<button type="button" class="ww-captain__chip" data-captain-pick="other">Over iets anders</button></div>';
+        messages.appendChild(messageNode("assistant", local(q)));
+        messages.scrollTop = messages.scrollHeight;
+        return;
+      }
       var cat = findCat(value);
       if (!force && cat && value.split(/\s+/).length <= 3) {
         messages.appendChild(messageNode("user", value));
@@ -460,13 +501,14 @@
       var button = form.querySelector("button[type=submit]");
       button.disabled = true;
       button.textContent = "Captain denkt na…";
-      messages.appendChild(messageNode("user", value));
+      if (!pendingShown) messages.appendChild(messageNode("user", value));
+      pendingShown = false;
       var thinking = document.createElement("div");
       thinking.className = "ww-captain__message ww-captain__message--assistant ww-captain__thinking";
       thinking.innerHTML = "<span></span><span></span><span></span>";
       messages.appendChild(thinking);
       messages.scrollTop = messages.scrollHeight;
-      request("POST", { message: value, context: context }).then(function (data) {
+      request("POST", { message: value, context: about === "product" ? context : { pageType: context.pageType, url: context.url, product: null, collection: null, customer: context.customer } }).then(function (data) {
         thinking.remove();
         messages.appendChild(messageNode("assistant", data.message.content, data.message.products, data.message.sources));
         setRemaining(data);
@@ -498,7 +540,17 @@
       }
     });
 
+    var pendingShown = false;
     messages.addEventListener("click", function (event) {
+      var pick = event.target.closest("[data-captain-pick]");
+      if (pick) {
+        about = pick.dataset.captainPick;
+        renderFocus();
+        pick.parentElement.querySelectorAll("button").forEach(function (b) { b.disabled = true; });
+        pick.classList.add("ww-captain__chip--primary");
+        if (pendingQuestion) { var pq = pendingQuestion; pendingQuestion = ""; pendingShown = true; send(pq, true); }
+        return;
+      }
       var choice = event.target.closest("[data-captain-choice]");
       if (choice) {
         var txt = choice.dataset.captainChoice;
