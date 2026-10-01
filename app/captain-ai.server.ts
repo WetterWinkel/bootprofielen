@@ -24,6 +24,7 @@ export type CaptainProduct = {
   variantId: string;
   variantTitle: string;
   availableVariantCount: number;
+  quantity?: number;
   variants: Array<{
     id: string;
     title: string;
@@ -570,7 +571,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
       type: "function",
       name: "select_wetterwinkel_products",
       description:
-        "Selecteer maximaal vier aantoonbaar passende producten (hoofdkeuze plus bijbehorende bijverkoop) uit eerdere WetterWinkel-zoekresultaten. Gebruik uitsluitend exact teruggegeven Shopify-product-ID's en zet de aanbevolen hoofdkeuze vooraan.",
+        "Selecteer maximaal vier aantoonbaar passende producten (hoofdkeuze plus bijbehorende bijverkoop) uit eerdere WetterWinkel-zoekresultaten. Gebruik uitsluitend exact teruggegeven Shopify-product-ID's en zet de aanbevolen hoofdkeuze vooraan. Geef in quantities per product (zelfde volgorde) het benodigde aantal verpakkingen, bijvoorbeeld 2 flessen olie of 4 fenders; standaard 1.",
       strict: true,
       parameters: {
         type: "object",
@@ -581,8 +582,13 @@ export async function answerCaptainQuestion(input: CaptainInput) {
             items: { type: "string" },
             maxItems: 4,
           },
+          quantities: {
+            type: "array",
+            items: { type: "integer" },
+            maxItems: 4,
+          },
         },
-        required: ["product_ids"],
+        required: ["product_ids", "quantities"],
       },
     },
   ];
@@ -735,9 +741,12 @@ export async function answerCaptainQuestion(input: CaptainInput) {
         const ids = Array.isArray(args.product_ids)
           ? args.product_ids.slice(0, 4)
           : [];
-        selectedProducts = ids.flatMap((id: unknown) => {
+        const quantities = Array.isArray(args.quantities) ? args.quantities : [];
+        selectedProducts = ids.flatMap((id: unknown, index: number) => {
           const product = productCandidates.get(String(id));
-          return product ? [product] : [];
+          if (!product) return [];
+          const quantity = Math.min(20, Math.max(1, Math.round(Number(quantities[index]) || 1)));
+          return [{ ...product, quantity }];
         });
         outputs.push({
           type: "function_call_output",

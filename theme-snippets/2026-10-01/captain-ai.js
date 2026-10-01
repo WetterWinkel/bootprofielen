@@ -108,13 +108,27 @@
     }).join("") + "</div>";
   }
 
+  function sourceName(s) {
+    var t = String(s.title || "").trim();
+    if (t && !/^https?:\/\//i.test(t)) return t.length > 70 ? t.slice(0, 67) + "…" : t;
+    try {
+      var u = new URL(s.url);
+      var file = decodeURIComponent(u.pathname.split("/").filter(Boolean).pop() || "");
+      var host = u.hostname.replace(/^www\./, "").replace(/^cdn\d*\./, "");
+      var isPdf = /\.pdf$/i.test(file);
+      file = file.replace(/\.[a-z0-9]{2,4}$/i, "").replace(/[-_]+/g, " ");
+      if (file.length > 34) file = file.slice(0, 31) + "…";
+      return (isPdf ? "Handleiding (PDF) – " : "") + host + (file && !isPdf ? " – " + file : "");
+    } catch (e) { return "Bron"; }
+  }
+
   function sourcesHtml(sources) {
     if (!Array.isArray(sources) || !sources.length) return "";
     var items = sources.filter(function (s) { return s && s.url; }).slice(0, 4);
     if (!items.length) return "";
     return '<details class="ww-captain__sources"><summary>Bronnen (' + items.length + ")</summary><ul>" +
       items.map(function (s) {
-        return '<li><a href="' + esc(s.url) + '" target="_blank" rel="noopener nofollow">' + esc(s.title || s.url) + "</a></li>";
+        return '<li><a href="' + esc(s.url) + '" target="_blank" rel="noopener nofollow">' + esc(sourceName(s)) + "</a></li>";
       }).join("") + "</ul></details>";
   }
 
@@ -169,7 +183,9 @@
           '<a class="ww-captain__product-link" href="' + esc(product.url) + '">' +
           (product.imageUrl ? '<img src="' + esc(product.imageUrl + (product.imageUrl.indexOf("?") > -1 ? "&" : "?") + "width=160") + '" alt="" loading="lazy">' : "") +
           "<span>" + esc(product.title) + (price ? "<small>" + (variants.length > 1 ? "Vanaf " : "") + price + "</small>" : "") + "</span></a>" +
-          choice + action + "</div>";
+          choice +
+          '<div class="ww-captain__buy"><label class="ww-captain__qty"><span>Aantal</span><input type="number" min="1" max="99" value="' +
+          esc(Math.max(1, Number(product.quantity) || 1)) + '" data-captain-qty></label>' + action + "</div></div>";
       }).join("") + "</div>";
   }
 
@@ -567,6 +583,8 @@
       var card = button.closest(".ww-captain__product");
       var selector = card && card.querySelector("[data-captain-variant-select]");
       var variantId = selector ? selector.value : button.dataset.variantId;
+      var qtyInput = card && card.querySelector("[data-captain-qty]");
+      var qty = Math.max(1, Math.min(99, parseInt(qtyInput && qtyInput.value, 10) || 1));
       var variantLabel = selector && selector.selectedIndex >= 0 ? selector.options[selector.selectedIndex].textContent : "";
       var productTitle = button.dataset.productTitle || "Het product";
       if (!variantId) return;
@@ -575,7 +593,7 @@
       fetch("/cart/add.js", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ items: [{ id: variantId, quantity: 1 }] })
+        body: JSON.stringify({ items: [{ id: variantId, quantity: qty }] })
       }).then(function (r) {
         if (!r.ok) throw new Error("fail");
         button.textContent = "Toegevoegd ✓";
@@ -584,7 +602,7 @@
         document.querySelectorAll(".cart-count, .cart-count-bubble span[aria-hidden='true']").forEach(function (n) { n.textContent = String(cart.item_count || 0); });
         var total = (cart.total_price || 0) / 100;
         var rest = 75 - total;
-        var msg = productTitle + (variantLabel ? " (" + variantLabel + ")" : "") + " ligt in je winkelwagen.";
+        var msg = (qty > 1 ? qty + "× " : "") + productTitle + (variantLabel ? " (" + variantLabel + ")" : "") + " ligt in je winkelwagen.";
         msg += rest > 0 ? " Nog " + money(rest) + " tot gratis verzending." : " Je bestelling wordt gratis verzonden!";
         var node = messageNode("assistant", plain(msg));
         node.insertAdjacentHTML("beforeend", '<div class="ww-captain__choices"><a class="ww-captain__chip ww-captain__chip--primary" href="/cart">Naar winkelwagen</a>' +
