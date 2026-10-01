@@ -396,6 +396,7 @@ ACTIEF VERKOPEN — ALTIJD EERLIJK
 - Bestellingen vanaf €75 worden gratis verzonden binnen Nederland en België. Ligt het aanbevolen totaal net onder €75, noem dit dan één keer kort met een passende aanvulling (bijv. een reserve-impeller, extra fenderlijn of onderhoudsmiddel).
 - Bij gelijkwaardige geschiktheid: kies eerst wat direct leverbaar is; geef daarna voorkeur aan Bardahl, Hollex, Hibo, Sjippie, Gebo en Talamex.
 - Sluit af met een duidelijke koopaanmoediging, bijvoorbeeld "Voeg de aanbevolen set toe aan uw winkelwagen, dan heeft u alles in één keer in huis." Wees enthousiast en stellig, maar beweer nooit iets over pasvorm, voorraad of levertijd dat niet vaststaat.
+- Beloof nooit dat je "later" of "daarna" nog iets controleert of opzoekt: zoek nu met search_wetterwinkel_products (ook op onderdeelnummers en kruisreferenties) en toon wat je vindt. Vind je niets exact passends, zeg dat eerlijk en toon het dichtstbijzijnde passende alternatief of bijbehorende onderdelen (bijv. pakking, impellervet).
 - Verkoop nooit een product dat niet aantoonbaar past; bij twijfel stel je de ene beslissende vraag en toon je alvast de meest waarschijnlijke keuze.
 
 PRODUCTADVIES — KORT EN VERKOPEND
@@ -465,9 +466,17 @@ Vul het verplichte gestructureerde antwoord zeer compact in. De structuur is int
 Zeg niet dat je een menselijke monteur of gecertificeerd expert bent.`;
 }
 
-function responseSources(response: any): CaptainSource[] {
+function responseSources(responses: any[]): CaptainSource[] {
   const sources = new Map<string, CaptainSource>();
-  for (const item of response.output ?? []) {
+  const items = responses.flatMap((response) => response?.output ?? []);
+  const searched: CaptainSource[] = [];
+  for (const item of items) {
+    if (item.type === "web_search_call") {
+      for (const src of item.action?.sources ?? []) {
+        if (src?.url) searched.push({ title: src.title || src.url, url: src.url, kind: "web" });
+      }
+      continue;
+    }
     if (item.type !== "message") continue;
     for (const content of item.content ?? []) {
       if (content.type !== "output_text") continue;
@@ -487,6 +496,11 @@ function responseSources(response: any): CaptainSource[] {
         }
       }
     }
+  }
+  // Eerst de bronnen die echt geciteerd zijn, daarna (zo nodig) de doorzochte pagina's.
+  for (const src of searched) {
+    if (sources.size >= 6) break;
+    if (src.url && !sources.has(src.url)) sources.set(src.url, src);
   }
   return [...sources.values()].slice(0, 10);
 }
@@ -606,6 +620,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
     client.responses.create({
       model,
       ...(final ? { tool_choice: "none" } : {}),
+      reasoning: { effort: "low" },
       instructions: instructions(input, prefetchedProducts, opportunity),
       input: responseInput as any,
       tools,
@@ -677,7 +692,9 @@ export async function answerCaptainQuestion(input: CaptainInput) {
         .slice(0, 64),
     } as any);
 
+  const allResponses: any[] = [];
   response = await createResponse();
+  allResponses.push(response);
   for (let round = 0; round < 6; round += 1) {
     const calls = (response.output ?? []).filter(
       (item: any) => item.type === "function_call",
@@ -738,6 +755,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
 
     responseInput = [...responseInput, ...(response.output ?? []), ...outputs];
     response = await createResponse();
+    allResponses.push(response);
   }
 
   let text = String(response.output_text || "").trim();
@@ -757,6 +775,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
     ];
     try {
       response = await createResponse(true);
+      allResponses.push(response);
       text = String(response.output_text || "").trim();
     } catch (error) {
       console.error("Captain AI afrondpoging mislukt", error);
@@ -769,7 +788,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
 
   return {
     text,
-    sources: responseSources(response),
+    sources: responseSources(allResponses).slice(0, 6),
     products: selectedProducts,
     model,
     inputTokens: response.usage?.input_tokens ?? null,
