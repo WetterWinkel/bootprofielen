@@ -1,8 +1,8 @@
 1
-00:00:00,100 --> 00:00:07,996
-Het serviceboek weet wanneer je volgende beurt nodig is, en Captain AI vertelt je volgens de fabrikant wat er moet gebeuren en welke onderdelen je nodig hebt.
+00:00:00,100 --> 00:00:07,888
+Het serviceboek weet wanneer je volgende beurt nodig is, en Captain Aai vertelt je volgens de fabrikant wat er moet gebeuren en welke onderdelen je nodig hebt.
 
 2
-00:00:07,946 --> 00:00:11,011
+00:00:07,838 --> 00:00:10,903
 Zo heb je nooit meer achterstallig onderhoud.
 

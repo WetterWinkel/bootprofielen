@@ -1,12 +1,12 @@
 1
-00:00:00,100 --> 00:00:01,878
-Captain AI.
+00:00:00,100 --> 00:00:01,746
+Captain Aai.
 
 2
-00:00:01,828 --> 00:00:05,422
+00:00:01,696 --> 00:00:05,254
 Gewoon vragen, direct het juiste antwoord.
 
 3
-00:00:05,422 --> 00:00:08,511
+00:00:05,254 --> 00:00:08,319
 Probeer het nu op wetterwinkel punt en-el.
 

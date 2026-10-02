@@ -1,12 +1,12 @@
 1
-00:00:00,100 --> 00:00:03,946
-Dit is Captain AI: de AI-schipper van WetterWinkel.
+00:00:00,100 --> 00:00:03,994
+Dit is Captain Aai: de AI-schipper van WetterWinkel.
 
 2
-00:00:03,896 --> 00:00:07,598
+00:00:03,944 --> 00:00:07,646
 Het eerste slimme watersportplatform van Nederland.
 
 3
-00:00:07,598 --> 00:00:13,655
-Zoek niet zelf door ruim achtentwintigduizend producten, maar laat Captain AI je direct goed adviseren.
+00:00:07,646 --> 00:00:13,463
+Zoek niet zelf door ruim achtentwintigduizend producten, maar laat Captain Aai je direct goed adviseren.
 

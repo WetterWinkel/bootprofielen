@@ -1,8 +1,8 @@
 1
-00:00:00,100 --> 00:00:04,607
-Captain AI, de AI-schipper van WetterWinkel, is gratis.
+00:00:00,100 --> 00:00:04,559
+Captain Aai, de AI-schipper van WetterWinkel, is gratis.
 
 2
-00:00:04,557 --> 00:00:08,860
+00:00:04,509 --> 00:00:08,812
 En samen met je bootprofiel heb je alles voor je boot op één plek.
 

@@ -3,10 +3,10 @@
 Vanaf nu werkt alles samen.
 
 2
-00:00:02,694 --> 00:00:09,653
-In het serviceboek houd je je onderhoud bij, en Captain AI adviseert volgens de onderhoudsgegevens van de fabrikant van jouw motor.
+00:00:02,694 --> 00:00:09,557
+In het serviceboek houd je je onderhoud bij, en Captain Aai adviseert volgens de onderhoudsgegevens van de fabrikant van jouw motor.
 
 3
-00:00:09,653 --> 00:00:12,706
+00:00:09,557 --> 00:00:12,610
 Zo heb je nooit meer achterstallig onderhoud.
 
