@@ -1,8 +1,3 @@
 1
-00:00:00,100 --> 00:00:03,465
-Daarna de romp, de afmetingen en de motor.
-
-2
-00:00:03,415 --> 00:00:08,319
-Bij de Viskus is dat een DAF zes-vijftien diesel van honderdveertig pk.
-
+00:00:00,050 --> 00:00:10,268
+Daarna de romp, de afmetingen en de motor. Bij de Viskus is dat een DAF zes-vijftien diesel van honderdveertig pk.

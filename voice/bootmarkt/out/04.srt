@@ -1,8 +1,3 @@
 1
-00:00:00,100 --> 00:00:04,126
-Geef de staat van de boot aan en welke uitrusting erbij zit.
-
-2
-00:00:04,076 --> 00:00:07,477
-Zo weten kopers precies wat ze krijgen.
-
+00:00:00,050 --> 00:00:08,204
+Geef de staat van de boot aan en welke uitrusting erbij zit. Zo weten kopers precies wat ze krijgen.

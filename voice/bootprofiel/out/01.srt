@@ -1,8 +1,3 @@
 1
-00:00:00,100 --> 00:00:04,847
-Een bootprofiel bij WetterWinkel is gratis, en in een paar minuten klaar.
-
-2
-00:00:04,797 --> 00:00:06,600
-Zo werkt het.
-
+00:00:00,050 --> 00:00:06,908
+Een bootprofiel bij WetterWinkel is gratis, en in een paar minuten klaar. Zo werkt het.

@@ -1,8 +1,3 @@
 1
-00:00:00,100 --> 00:00:05,027
-Voeg de kosten en de factuur of werkbon toe, en zet de volgende beurt erin.
-
-2
-00:00:04,977 --> 00:00:08,126
-Zo weet je precies wanneer die nodig is.
-
+00:00:00,050 --> 00:00:09,140
+Voeg de kosten en de factuur of werkbon toe, en zet de volgende beurt erin. Zo weet je precies wanneer die nodig is.

@@ -1,4 +1,3 @@
 1
-00:00:00,100 --> 00:00:06,470
+00:00:00,050 --> 00:00:07,820
 Voeg een foto van je boot toe en vul de basisgegevens in: naam, merk, model en bouwjaar.
-

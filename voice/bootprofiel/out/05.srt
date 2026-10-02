@@ -1,4 +1,3 @@
 1
-00:00:00,100 --> 00:00:07,071
+00:00:00,050 --> 00:00:09,452
 Vul je vaargebied en ligplaats in, en vink je uitrusting aan: navigatie, comfort, elektra en dek.
-
