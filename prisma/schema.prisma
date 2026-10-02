@@ -87,6 +87,7 @@ enum CaptainMessageRole {
 enum CaptainUsageType {
   FREE
   CREDIT
+  PASS
 }
 
 model CaptainConversation {
@@ -146,6 +147,7 @@ model CaptainCreditBalance {
   shop       String
   customerId String
   credits    Int      @default(0)
+  passUntil  DateTime?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -157,6 +159,7 @@ model CaptainCreditPurchase {
   shop         String
   customerId   String
   credits      Int
+  passDays     Int       @default(0)
   priceCents   Int
   paymentToken String    @unique
   draftOrderId String?   @unique

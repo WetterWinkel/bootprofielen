@@ -409,7 +409,32 @@
     }
 
     function setRemaining(d) {
-      if (typeof d.remaining === "number") remaining.textContent = "Nog " + d.remaining + " gratis adviesvragen";
+      if (d && d.billing && d.billing.statusText) remaining.textContent = d.billing.statusText;
+      else if (typeof d.remaining === "number") remaining.textContent = "Nog " + d.remaining + " gratis adviesvragen";
+    }
+
+    function buyBox(payload) {
+      var b = payload.billing || {};
+      var box = document.createElement("div");
+      box.className = "ww-captain__profile-nudge ww-captain__profile-nudge--hard ww-captain__buy-box";
+      var packs = (b.packs || []).map(function (p) {
+        return '<button type="button" class="ww-captain__pack" data-captain-pack="' + esc(p.id) + '"><b>' + esc(p.label) + '</b><span>' + esc(p.price) + '</span><small>' + esc(p.description) + '</small></button>';
+      }).join("");
+      box.innerHTML = "<strong>Je 6 gratis vragen voor vandaag zijn op</strong><p>Ga direct verder met Captain AI, of stel morgen weer 6 gratis vragen.</p>" +
+        '<div class="ww-captain__packs">' + packs + '</div><p class="ww-captain__pack-note">Je betaalt veilig via de WetterWinkel-kassa. Geen abonnement: de maandpas stopt vanzelf.</p>';
+      box.addEventListener("click", function (event) {
+        var btn = event.target.closest("[data-captain-pack]");
+        if (!btn) return;
+        btn.disabled = true;
+        btn.querySelector("small").textContent = "Betaling wordt voorbereid…";
+        request("POST", { intent: "buy", pack: btn.getAttribute("data-captain-pack") }).then(function (d) {
+          if (d.checkoutUrl) window.location.href = d.checkoutUrl;
+        }).catch(function (error) {
+          btn.disabled = false;
+          btn.querySelector("small").textContent = error.message || "Probeer het opnieuw of bel 0513-241911.";
+        });
+      });
+      return box;
     }
 
     function lock(payload) {
@@ -417,6 +442,7 @@
       form.dataset.captainLocked = "true";
       question.disabled = true;
       form.querySelector("button[type=submit]").disabled = true;
+      if (payload && payload.billing && payload.billing.canBuy) { chat.appendChild(buyBox(payload)); return; }
       var box = document.createElement("div");
       box.className = "ww-captain__profile-nudge ww-captain__profile-nudge--hard";
       box.innerHTML = "<strong>Je gratis adviesvragen zijn op</strong><p>Maak gratis een bootprofiel aan: dan onthoudt Captain je boot en kun je verder met persoonlijk advies.</p>" +

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { ActionFunctionArgs } from "react-router";
 import prisma from "../db.server";
+import { applyPaidCaptainPurchase } from "../lib/captain-billing.server";
 import { authenticate } from "../shopify.server";
 
 function attributes(payload: any) {
@@ -63,24 +64,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         orderId: order?.id,
       });
     } else {
-      await prisma.$transaction(async (tx) => {
-        const credited = await tx.captainCreditPurchase.updateMany({
-          where: { id: purchase.id, shop, paidAt: null },
-          data: { paidAt: new Date(), paidOrderId },
-        });
-        if (!credited.count) return;
-        await tx.captainCreditBalance.upsert({
-          where: {
-            shop_customerId: { shop, customerId: purchase.customerId },
-          },
-          create: {
-            shop,
-            customerId: purchase.customerId,
-            credits: purchase.credits,
-          },
-          update: { credits: { increment: purchase.credits } },
-        });
-      });
+      await applyPaidCaptainPurchase(purchase, shop, paidOrderId);
     }
   }
 

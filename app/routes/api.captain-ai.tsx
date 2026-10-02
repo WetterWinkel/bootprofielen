@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { answerCaptainQuestion, type CaptainImage } from "../captain-ai.server";
 import prisma from "../db.server";
+import { applyPaidCaptainPurchase } from "../lib/captain-billing.server";
 import { authenticate, unauthenticated } from "../shopify.server";
 
 const METAFIELD_NAMESPACE = "$app";
@@ -139,27 +140,7 @@ async function usageSummary(shop: string, customerId: string) {
 }
 
 async function creditPurchase(purchase: any, paidOrderId: string) {
-  await prisma.$transaction(async (tx) => {
-    const credited = await tx.captainCreditPurchase.updateMany({
-      where: { id: purchase.id, shop: purchase.shop, paidAt: null },
-      data: { paidAt: new Date(), paidOrderId },
-    });
-    if (!credited.count) return;
-    await tx.captainCreditBalance.upsert({
-      where: {
-        shop_customerId: {
-          shop: purchase.shop,
-          customerId: purchase.customerId,
-        },
-      },
-      create: {
-        shop: purchase.shop,
-        customerId: purchase.customerId,
-        credits: purchase.credits,
-      },
-      update: { credits: { increment: purchase.credits } },
-    });
-  });
+  await applyPaidCaptainPurchase(purchase, purchase.shop, paidOrderId);
 }
 
 async function reconcileCreditPurchases(
