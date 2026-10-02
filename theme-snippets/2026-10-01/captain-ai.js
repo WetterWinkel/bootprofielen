@@ -76,6 +76,27 @@
     for (var i = 0; i < CATS.length; i++) if (CATS[i].keys.test(text)) return CATS[i];
     return null;
   }
+  var STOP = /^(voor|van|de|het|een|mijn|op|met|en|in|bij|aan|om|te|die|dat|welke|wat|ik|zoek|nodig)$/i;
+  function meaningful(text) {
+    return String(text || "").toLowerCase().split(/[^a-z0-9à-ÿ-]+/i).filter(function (w) { return w && !STOP.test(w); });
+  }
+  function stem(w) { return String(w).toLowerCase().replace(/(en|s)$/, ""); }
+  // Specifieke keuze binnen een categorie, bijv. "primer voor antifouling" -> Primers.
+  function findOpt(text) {
+    var words = meaningful(text).map(stem);
+    if (words.length < 2) return null;
+    var hits = [];
+    for (var i = 0; i < CATS.length; i++)
+      for (var j = 0; j < CATS[i].opts.length; j++) {
+        var label = CATS[i].opts[j][0];
+        if (/^alle /i.test(label)) continue;
+        var lw = meaningful(label).map(stem);
+        if (lw.length && lw.every(function (x) { return words.some(function (w) { return w === x || (x.length > 4 && w.indexOf(x) === 0); }); }))
+          hits.push({ label: label, url: CATS[i].opts[j][1], generic: CATS[i].keys.test(label) });
+      }
+    // Liefst de specifieke keuze (Primers), niet de categorienaam zelf (Antifouling).
+    return hits.filter(function (h) { return !h.generic; })[0] || null;
+  }
   function optUrl(label) {
     var l = String(label || "").trim().toLowerCase();
     for (var i = 0; i < CATS.length; i++)
@@ -419,10 +440,12 @@
       e.preventDefault();
       var q = searchInput.value.trim();
       if (!q) return;
-      var cat = findCat(q);
-      if (cat && q.split(/\s+/).length <= 3) { openCat(cat, q); return; }
       if (q.split(/\s+/).length >= 4 || /\?$/.test(q)) { ask(q); return; }
-      location.href = S(q);
+      var opt = findOpt(q);
+      if (opt) { location.href = opt.url; return; }
+      var cat = findCat(q);
+      if (cat && meaningful(q).length <= 1) { openCat(cat, q); return; }
+      location.href = S(meaningful(q).join(" ") || q);
     });
 
     /* ----- verbinding en gesprek ----- */
@@ -586,7 +609,7 @@
         return;
       }
       var cat = findCat(value);
-      if (!force && cat && value.split(/\s+/).length <= 3) {
+      if (!force && cat && meaningful(value).length <= 1) {
         messages.appendChild(messageNode("user", value));
         var html = "<p>" + esc(cat.q) + "</p>" + linkChipsHtml(cat.opts) +
           '<button type="button" class="ww-captain__ask" data-captain-advise="' + esc(value) + '">🧭 Laat Captain adviseren wat bij jouw boot past</button>';
