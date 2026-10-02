@@ -1,0 +1,36 @@
+name: Voice-over genereren
+on:
+  push:
+    paths:
+      - "voice/**/scenes/*.txt"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  tts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install edge-tts
+      - name: Genereer audio per scene
+        run: |
+          for dir in voice/*/; do
+            [ -d "$dir/scenes" ] || continue
+            mkdir -p "$dir/out"
+            voice=$(cat "$dir/voice.txt" 2>/dev/null || echo nl-NL-MaartenNeural)
+            rate=$(cat "$dir/rate.txt" 2>/dev/null || echo "+0%")
+            for f in "$dir"/scenes/*.txt; do
+              n=$(basename "$f" .txt)
+              edge-tts --voice "$voice" --rate="$rate" -f "$f" --write-media "$dir/out/$n.mp3" --write-subtitles "$dir/out/$n.srt"
+            done
+          done
+      - name: Commit resultaat
+        run: |
+          git config user.name "voiceover-bot"
+          git config user.email "voiceover-bot@users.noreply.github.com"
+          git add voice/*/out
+          git diff --cached --quiet || git commit -m "Voice-over audio [skip ci]"
+          git push
