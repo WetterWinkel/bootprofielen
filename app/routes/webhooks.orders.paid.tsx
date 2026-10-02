@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { ActionFunctionArgs } from "react-router";
 import prisma from "../db.server";
-import { applyPaidCaptainPurchase } from "../lib/captain-billing.server";
+import { applyCaptainOrderLines, applyPaidCaptainPurchase } from "../lib/captain-billing.server";
 import { authenticate } from "../shopify.server";
 
 function attributes(payload: any) {
@@ -66,6 +66,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     } else {
       await applyPaidCaptainPurchase(purchase, shop, paidOrderId);
     }
+  }
+
+  try {
+    // Conceptorders met eigen token zijn hierboven al verwerkt.
+    if (!captainToken) await applyCaptainOrderLines(shop, order);
+  } catch (error) {
+    console.error("Captain AI-product verwerken mislukt", error);
   }
 
   return new Response();

@@ -149,6 +149,7 @@ model CaptainCreditBalance {
   credits    Int      @default(0)
   passUntil  DateTime?
   passCredits Int     @default(0)
+  anonymous  Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

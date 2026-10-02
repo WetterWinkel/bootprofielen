@@ -8,6 +8,7 @@ import {
   captainBalance,
   captainPacks,
   createCaptainCheckout,
+  setCaptainAnonymous,
   euro,
   reconcileCaptainPurchases,
   spendCredit,
@@ -18,13 +19,12 @@ const METAFIELD_NAMESPACE = "$app";
 const METAFIELD_KEY = "bootprofielen";
 const MAX_MESSAGE_LENGTH = 1500;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const STOREFRONT_LIMIT = 6; // met toestemming om vragen anoniem te gebruiken
-const STOREFRONT_LIMIT_NO_CONSENT = 4;
-function freeLimit(consent: boolean) {
-  return consent ? STOREFRONT_LIMIT : STOREFRONT_LIMIT_NO_CONSENT;
-}
-function consentFrom(request: Request) {
-  return new URL(request.url).searchParams.get("consent") === "1";
+// Zonder bootprofiel: 2 proefvragen in totaal. Met bootprofiel: 5 gratis vragen per 24 uur.
+// Daarboven: maandpas of vragenpakket (gekocht als product in de gewone kassa).
+const STOREFRONT_LIMIT = 5;
+const TRIAL_LIMIT = 2;
+function freeLimit(hasProfile: boolean) {
+  return hasProfile ? STOREFRONT_LIMIT : TRIAL_LIMIT;
 }
 const TRIAL_PROFILE_ID = "anonymous-trial";
 const UNPROFILED_PROFILE_ID = "account-without-profile";
@@ -189,9 +189,8 @@ async function usage(
   customerId: string,
   profileId: string,
   hasProfile: boolean,
-  consent = false,
 ) {
-  const limit = freeLimit(consent);
+  const limit = freeLimit(hasProfile);
   const where: any = {
     role: "USER",
     usageType: "FREE",
@@ -222,7 +221,10 @@ async function paidAccess(shop: string, shopifyCustomerId: string, hasProfile: b
   const balance = await captainBalance(shop, shopifyCustomerId);
   const passAvailable = hasProfile && balance.passActive;
   const creditAvailable = hasProfile && balance.credits > 0;
-  return { balance, passAvailable, creditAvailable };
+  const paidActive = balance.passActive || balance.credits > 0;
+  // Gratis gebruik helpt Captain AI verbeteren; betalende klanten mogen kiezen voor anoniem.
+  const anonymous = paidActive && balance.anonymous;
+  return { balance, passAvailable, creditAvailable, paidActive, anonymous };
 }
 
 function billingPayload(
@@ -242,6 +244,8 @@ function billingPayload(
   else if (freeRemaining > 0 && balance.credits > 0) statusText += ` · ${balance.credits} tegoed`;
   return {
     canBuy: hasProfile && !isAnonymous,
+    anonymousAllowed: access.paidActive && !isAnonymous,
+    anonymous: access.anonymous,
     credits: balance.credits,
     passUntil: balance.passUntil ? balance.passUntil.toISOString() : null,
     passActive: balance.passActive,
@@ -251,6 +255,7 @@ function billingPayload(
       label: p.label,
       description: p.description,
       price: euro(p.priceCents),
+      variantId: p.variantId,
     })),
   };
 }
@@ -391,7 +396,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
   try {
     const { shop, customerId, shopifyCustomerId, isAnonymous, admin } =
       await storefrontContext(request);
-    const consent = consentFrom(request);
     const profiles = shopifyCustomerId
       ? await ownedProfiles(admin, shopifyCustomerId)
       : [];
@@ -404,7 +408,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
       customerId,
       profileId,
       Boolean(profile),
-      consent,
     );
 
     const conversations = await prisma.captainConversation.findMany({
@@ -465,8 +468,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
       limitReached:
         currentUsage.remaining <= 0 && !access.passAvailable && !access.creditAvailable,
       billing: billingPayload(access, currentUsage.remaining, Boolean(profile), isAnonymous),
-      consent,
-      consentBonus: STOREFRONT_LIMIT - STOREFRONT_LIMIT_NO_CONSENT,
       profilePrompt: shouldOfferProfile(currentUsage.used, Boolean(profile), currentUsage.limit),
       profileUrl: PROFILE_URL,
       conversationId: recentConversation?.id || "",
@@ -494,7 +495,6 @@ export async function action({ request }: ActionFunctionArgs) {
     const { shop, customerId, shopifyCustomerId, isAnonymous, admin } =
       await storefrontContext(request);
     const body = await request.json();
-    const consent = consentFrom(request) || body.consent === true;
     const profiles = shopifyCustomerId
       ? await ownedProfiles(admin, shopifyCustomerId)
       : [];
@@ -521,6 +521,17 @@ export async function action({ request }: ActionFunctionArgs) {
         String(body.pack || ""),
       );
       return json({ success: true, checkoutUrl });
+    }
+
+    if (body.intent === "set_anonymous") {
+      if (!shopifyCustomerId) return json({ success: false, message: "Log eerst in." }, 400);
+      const current = await paidAccess(shop, shopifyCustomerId, Boolean(profile));
+      if (!current.paidActive && body.anonymous) {
+        return json({ success: false, message: "Anoniem vragen is onderdeel van de betaalde versie." }, 400);
+      }
+      await setCaptainAnonymous(shop, shopifyCustomerId, Boolean(body.anonymous));
+      const after = await paidAccess(shop, shopifyCustomerId, Boolean(profile));
+      return json({ success: true, billing: billingPayload(after, 0, Boolean(profile), isAnonymous) });
     }
 
     if (body.intent === "new_conversation") {
@@ -559,7 +570,6 @@ export async function action({ request }: ActionFunctionArgs) {
       customerId,
       profileId,
       Boolean(profile),
-      consent,
     );
 
     const access = await paidAccess(shop, shopifyCustomerId, Boolean(profile));
@@ -575,8 +585,6 @@ export async function action({ request }: ActionFunctionArgs) {
           success: false,
           limitReached: true,
           billing: billingPayload(access, 0, Boolean(profile), isAnonymous),
-          consent,
-          consentBonus: consent ? 0 : STOREFRONT_LIMIT - STOREFRONT_LIMIT_NO_CONSENT,
           profilePrompt: !profile,
           requiresProfile: !profile,
           profileUrl: PROFILE_URL,
@@ -609,7 +617,7 @@ export async function action({ request }: ActionFunctionArgs) {
           profileId,
           channel: "STOREFRONT",
           boatContext: profile?.data || {},
-          improvementConsent: consent,
+          improvementConsent: !access.anonymous,
           title: profile ? "Webshopadvies" : "Webshopadvies proefmodus",
         },
         include: { messages: true },
@@ -710,7 +718,7 @@ ${salesFlowText({
         data: {
           boatContext: profile?.data || {},
           title: rawMessage.slice(0, 80),
-          ...(consent ? { improvementConsent: true } : {}),
+          improvementConsent: !access.anonymous,
         },
       }),
     ]);
@@ -720,8 +728,6 @@ ${salesFlowText({
     return json({
       success: true,
       limit: currentUsage.limit,
-      consent,
-      consentBonus: STOREFRONT_LIMIT - STOREFRONT_LIMIT_NO_CONSENT,
       used: usedAfter,
       remaining: remainingAfter,
       limitReached:

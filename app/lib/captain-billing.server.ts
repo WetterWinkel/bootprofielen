@@ -24,7 +24,8 @@ export function captainPacks() {
       priceCents: passPrice,
       credits: passCredits,
       passDays,
-      sku: `WW-CAPTAIN-PAS-${passDays}`,
+      sku: "WW-CAPTAIN-PAS-35",
+      variantId: process.env.CAPTAIN_PASS_VARIANT_ID || "57391483912532",
     },
     {
       id: "pack",
@@ -34,7 +35,8 @@ export function captainPacks() {
       priceCents: packPrice,
       credits: packCredits,
       passDays: 0,
-      sku: `WW-CAPTAIN-${packCredits}`,
+      sku: "WW-CAPTAIN-15",
+      variantId: process.env.CAPTAIN_PACK_VARIANT_ID || "57391484567892",
     },
   ];
 }
@@ -45,7 +47,7 @@ export function euro(cents: number) {
 
 export async function captainBalance(shop: string, customerId: string) {
   if (!customerId || customerId.startsWith("anon:")) {
-    return { credits: 0, passCredits: 0, passUntil: null as Date | null, passActive: false };
+    return { credits: 0, passCredits: 0, passUntil: null as Date | null, passActive: false, anonymous: false };
   }
   const row = await prisma.captainCreditBalance.findUnique({
     where: { shop_customerId: { shop, customerId } },
@@ -58,6 +60,7 @@ export async function captainBalance(shop: string, customerId: string) {
     passCredits,
     passUntil,
     passActive: passValid && passCredits > 0,
+    anonymous: row?.anonymous ?? false,
   };
 }
 
@@ -213,5 +216,58 @@ export async function reconcileCaptainPurchases(admin: any, shop: string, custom
     }
   } catch (error) {
     console.warn("Captain AI-betaling controleren mislukt", error);
+  }
+}
+
+
+export async function setCaptainAnonymous(shop: string, customerId: string, anonymous: boolean) {
+  await prisma.captainCreditBalance.upsert({
+    where: { shop_customerId: { shop, customerId } },
+    create: { shop, customerId, anonymous },
+    update: { anonymous },
+  });
+}
+
+/**
+ * Verwerkt Captain AI-producten die gewoon via de winkelwagen/kassa zijn gekocht.
+ * Het tegoed komt op het klantaccount van de bestelling (Shopify koppelt bestellingen op e-mailadres).
+ */
+export async function applyCaptainOrderLines(shop: string, order: any) {
+  const packs = captainPacks();
+  const rawCustomer = order?.customer?.id ?? order?.customer?.admin_graphql_api_id;
+  const lines = (order?.line_items ?? []).flatMap((line: any) => {
+    const pack = packs.find(
+      (p) => String(line.sku || "") === p.sku || String(line.variant_id || "") === p.variantId,
+    );
+    return pack ? [{ line, pack }] : [];
+  });
+  if (!lines.length) return;
+  if (!rawCustomer) {
+    console.warn("Captain AI-product besteld zonder klantaccount", { shop, orderId: order?.id });
+    return;
+  }
+  const customerId = String(rawCustomer).startsWith("gid://")
+    ? String(rawCustomer)
+    : `gid://shopify/Customer/${rawCustomer}`;
+  const paidOrderId = String(order.id).startsWith("gid://") ? String(order.id) : `gid://shopify/Order/${order.id}`;
+  for (const { line, pack } of lines) {
+    const quantity = Math.max(1, Number(line.quantity) || 1);
+    const paymentToken = `order:${order.id}:${line.id}`;
+    const existing = await prisma.captainCreditPurchase.findUnique({ where: { paymentToken } });
+    if (existing?.paidAt) continue;
+    const purchase =
+      existing ??
+      (await prisma.captainCreditPurchase.create({
+        data: {
+          shop,
+          customerId,
+          credits: pack.credits * quantity,
+          passDays: pack.passDays,
+          priceCents: pack.priceCents * quantity,
+          paymentToken,
+        },
+      }));
+    // paidOrderId is uniek per aankoop; bij meerdere regels alleen de eerste koppelen.
+    await applyPaidCaptainPurchase(purchase, shop, lines[0].line === line ? paidOrderId : `${paidOrderId}#${line.id}`);
   }
 }

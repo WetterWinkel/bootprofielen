@@ -231,33 +231,23 @@
     var label = root.querySelector("[data-captain-context-label]");
     var ready = false;
     var locked = false;
-    var consent = false;
-    try { consent = localStorage.getItem("wwCaptainConsent") === "1"; } catch (e) {}
-    function endpointUrl() {
-      return endpoint + (endpoint.indexOf("?") > -1 ? "&" : "?") + "consent=" + (consent ? "1" : "0");
-    }
-    if (remaining && form) {
-      var consentLabel = document.createElement("label");
-      consentLabel.className = "ww-captain__consent";
-      consentLabel.innerHTML = '<input type="checkbox" data-captain-consent> <span>Mijn vragen mogen anoniem gebruikt worden om Captain AI te verbeteren: <b>6 i.p.v. 4</b> gratis vragen per dag.</span>';
-      remaining.parentNode.insertBefore(consentLabel, remaining);
-      var consentBox = consentLabel.querySelector("input");
-      consentBox.checked = consent;
-      consentBox.addEventListener("change", function () { setConsent(consentBox.checked); });
-    }
-    function setConsent(value) {
-      consent = !!value;
-      try { localStorage.setItem("wwCaptainConsent", consent ? "1" : "0"); } catch (e) {}
-      var cb = root.querySelector("[data-captain-consent]");
-      if (cb) cb.checked = consent;
-      request("GET").then(function (d) {
-        unlock();
-        setRemaining(d);
-        if (d.limitReached) lock(d);
-      }).catch(function (error) {
-        var p = error && error.payload;
-        if (p) { unlock(); setRemaining(p); if (p.limitReached) lock(p); }
-      });
+    function endpointUrl() { return endpoint; }
+    var anonWrap = null;
+    function renderAnon(billing) {
+      if (!remaining) return;
+      if (!billing || !billing.anonymousAllowed) { if (anonWrap) anonWrap.hidden = true; return; }
+      if (!anonWrap) {
+        anonWrap = document.createElement("label");
+        anonWrap.className = "ww-captain__consent";
+        anonWrap.innerHTML = '<input type="checkbox" data-captain-anon> <span>Anoniem vragen: mijn vragen niet gebruiken om Captain AI te verbeteren (betaalde versie).</span>';
+        remaining.parentNode.insertBefore(anonWrap, remaining.nextSibling);
+        anonWrap.querySelector("input").addEventListener("change", function (ev) {
+          var box = ev.target;
+          request("POST", { intent: "set_anonymous", anonymous: box.checked }).catch(function () { box.checked = !box.checked; });
+        });
+      }
+      anonWrap.hidden = false;
+      anonWrap.querySelector("input").checked = !!billing.anonymous;
     }
     function unlock() {
       locked = false;
@@ -267,10 +257,6 @@
         form.querySelector("button[type=submit]").disabled = false;
       }
       Array.prototype.forEach.call(root.querySelectorAll(".ww-captain__profile-nudge--hard"), function (n) { n.remove(); });
-    }
-    function consentOffer(payload) {
-      if (consent || !payload || !payload.consentBonus) return "";
-      return '<button type="button" class="ww-captain__consent-offer" data-captain-consent-offer>Deel mijn vragen anoniem en krijg vandaag ' + esc(String(payload.consentBonus)) + ' vragen extra</button>';
     }
     var hasPage = !!(context.product || context.collection);
     var pageTitle = context.product ? context.product.title : (context.collection ? context.collection.title : "");
@@ -450,6 +436,7 @@
     }
 
     function setRemaining(d) {
+      if (d && d.billing) renderAnon(d.billing);
       if (d && d.billing && d.billing.statusText) remaining.textContent = d.billing.statusText;
       else if (typeof d.remaining === "number") remaining.textContent = "Nog " + d.remaining + " gratis adviesvragen";
     }
@@ -459,18 +446,23 @@
       var box = document.createElement("div");
       box.className = "ww-captain__profile-nudge ww-captain__profile-nudge--hard ww-captain__buy-box";
       var packs = (b.packs || []).map(function (p) {
-        return '<button type="button" class="ww-captain__pack" data-captain-pack="' + esc(p.id) + '"><span class="ww-captain__pack-top"><b>' + esc(p.label) + '</b><span>' + esc(p.price) + '</span></span><small>' + esc(p.description) + '</small></button>';
+        return '<button type="button" class="ww-captain__pack" data-captain-pack="' + esc(p.id) + '" data-captain-variant="' + esc(p.variantId) + '"><span class="ww-captain__pack-top"><b>' + esc(p.label) + '</b><span>' + esc(p.price) + '</span></span><small>' + esc(p.description) + '</small></button>';
       }).join("");
-      box.innerHTML = "<strong>Je " + esc(String(payload.limit || 6)) + " gratis vragen voor vandaag zijn op</strong><p>Ga direct verder met Captain AI, of stel morgen weer gratis vragen.</p>" + consentOffer(payload) +
-        '<div class="ww-captain__packs">' + packs + '</div><p class="ww-captain__pack-note">Je betaalt veilig via de WetterWinkel-kassa. Geen abonnement: de maandpas stopt vanzelf.</p>';
+      box.innerHTML = "<strong>Je " + esc(String(payload.limit || 6)) + " gratis vragen voor vandaag zijn op</strong><p>Ga direct verder met Captain AI, of stel morgen weer gratis vragen.</p>" +
+        '<div class="ww-captain__packs">' + packs + '</div><p class="ww-captain__pack-note">Afrekenen via de gewone WetterWinkel-kassa (iDEAL e.d.). Bestel met hetzelfde e-mailadres als je account; de vragen worden direct bijgeschreven. Geen abonnement.</p>';
       box.addEventListener("click", function (event) {
-        if (event.target.closest("[data-captain-consent-offer]")) { setConsent(true); return; }
         var btn = event.target.closest("[data-captain-pack]");
         if (!btn) return;
         btn.disabled = true;
-        btn.querySelector("small").textContent = "Betaling wordt voorbereid…";
-        request("POST", { intent: "buy", pack: btn.getAttribute("data-captain-pack") }).then(function (d) {
-          if (d.checkoutUrl) window.location.href = d.checkoutUrl;
+        btn.querySelector("small").textContent = "Naar de kassa…";
+        var variant = btn.getAttribute("data-captain-variant");
+        fetch("/cart/add.js", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify({ items: [{ id: Number(variant), quantity: 1 }] })
+        }).then(function (r) {
+          if (!r.ok) throw new Error("Toevoegen aan winkelwagen mislukt.");
+          window.location.href = "/checkout";
         }).catch(function (error) {
           btn.disabled = false;
           btn.querySelector("small").textContent = error.message || "Probeer het opnieuw of bel 0513-241911.";
@@ -487,11 +479,8 @@
       if (payload && payload.billing && payload.billing.canBuy) { chat.appendChild(buyBox(payload)); return; }
       var box = document.createElement("div");
       box.className = "ww-captain__profile-nudge ww-captain__profile-nudge--hard";
-      box.innerHTML = "<strong>Je gratis adviesvragen zijn op</strong><p>Maak gratis een bootprofiel aan: dan onthoudt Captain je boot en kun je verder met persoonlijk advies.</p>" + consentOffer(payload) +
+      box.innerHTML = "<strong>Je gratis adviesvragen zijn op</strong><p>Maak gratis een bootprofiel aan: dan onthoudt Captain je boot en kun je verder met persoonlijk advies.</p>" +
         '<div><a href="' + esc((payload && payload.profileUrl) || PROFILE_URL) + '">Bootprofiel aanmaken</a><a class="ww-captain__ghost" href="tel:+31513241911">Bel 0513-241911</a></div>';
-      box.addEventListener("click", function (event) {
-        if (event.target.closest("[data-captain-consent-offer]")) setConsent(true);
-      });
       chat.appendChild(box);
     }
 
@@ -526,7 +515,7 @@
         gate.hidden = true;
         var p = error && error.payload;
         if (p && (p.limitReached || p.remaining === 0)) lock(p);
-        else remaining.textContent = (consent ? 6 : 4) + " gratis adviesvragen per dag";
+        else remaining.textContent = "5 gratis adviesvragen per dag met je bootprofiel";
       });
     }
 
