@@ -1,0 +1,8 @@
+1
+00:00:00,100 --> 00:00:03,886
+Open je bootprofiel en klik op Digitaal serviceboek.
+
+2
+00:00:03,836 --> 00:00:06,925
+Elke boot heeft zijn eigen serviceboek.
+

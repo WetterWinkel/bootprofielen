@@ -1,0 +1,8 @@
+1
+00:00:00,100 --> 00:00:04,078
+Log in op je WetterWinkel-account en ga naar Mijn bootdossier.
+
+2
+00:00:04,028 --> 00:00:06,648
+Klik op Nieuwe boot toevoegen.
+
