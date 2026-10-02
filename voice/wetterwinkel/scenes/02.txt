@@ -1,1 +1,1 @@
-Captain AI geeft advies op basis van de onderhoudsgegevens en handleidingen van de fabrikant. Hoe meer hij van jouw boot weet, hoe beter zijn advies.
+Captain Aai geeft advies op basis van de onderhoudsgegevens en handleidingen van de fabrikant. Hoe meer hij van jouw boot weet, hoe beter zijn advies.
