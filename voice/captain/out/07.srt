@@ -1,0 +1,12 @@
+1
+00:00:00,100 --> 00:00:01,878
+Captain AI.
+
+2
+00:00:01,828 --> 00:00:05,446
+Gewoon vragen, direct het juiste antwoord.
+
+3
+00:00:05,446 --> 00:00:08,800
+Probeer het nu op wetterwinkel punt n l.
+

@@ -1,0 +1,8 @@
+1
+00:00:00,100 --> 00:00:03,922
+Rechtsonder op elke pagina staat Captain voor je klaar.
+
+2
+00:00:03,872 --> 00:00:10,783
+Tik op het rondje en je krijgt meteen een menu: producten zoeken, hulp bij bootonderhoud, of je eigen bootprofiel aanmaken.
+

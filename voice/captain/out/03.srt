@@ -1,0 +1,12 @@
+1
+00:00:00,100 --> 00:00:02,672
+Zoek je bijvoorbeeld fenders?
+
+2
+00:00:02,622 --> 00:00:08,138
+Typ het in, en Captain vraagt meteen welk type je zoekt: cilinder, kogel of drop.
+
+3
+00:00:08,138 --> 00:00:11,636
+Eén tik, en je staat in de juiste categorie.
+

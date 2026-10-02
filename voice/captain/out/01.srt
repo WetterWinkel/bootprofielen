@@ -1,0 +1,8 @@
+1
+00:00:00,100 --> 00:00:03,946
+Dit is Captain AI: de AI-schipper van WetterWinkel.
+
+2
+00:00:03,896 --> 00:00:07,598
+Het eerste slimme watersportplatform van Nederland.
+
