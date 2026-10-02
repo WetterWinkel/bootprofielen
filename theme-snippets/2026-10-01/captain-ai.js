@@ -132,17 +132,24 @@
       }).join("") + "</ul></details>";
   }
 
+  function clean(t) {
+    return String(t == null ? "" : t)
+      .replace(/\s*\(\[[^\]]+\]\((https?:\/\/[^)\s]+)\)\)/g, "")
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, "$1")
+      .replace(/\s+([.,;:])/g, "$1");
+  }
+
   function answerHtml(raw) {
     var data;
     try { data = JSON.parse(raw); } catch (e) { return "<p>" + esc(raw) + "</p>"; }
     if (data && data.local) return data.html || "";
     var blocks = [];
-    if (data.summary) blocks.push("<p>" + esc(data.summary) + "</p>");
+    if (data.summary) blocks.push("<p>" + esc(clean(data.summary)) + "</p>");
     [["Let op", data.safety], ["Controleer dit", data.checks], ["Mogelijke oorzaken", data.causes], ["Advies", data.solution]].forEach(function (s) {
       if (!Array.isArray(s[1]) || !s[1].length) return;
-      blocks.push("<div><strong>" + s[0] + "</strong><ul>" + s[1].map(function (i) { return "<li>" + esc(i) + "</li>"; }).join("") + "</ul></div>");
+      blocks.push("<div><strong>" + s[0] + "</strong><ul>" + s[1].map(function (i) { return "<li>" + esc(clean(i)) + "</li>"; }).join("") + "</ul></div>");
     });
-    if (data.follow_up) blocks.push('<p class="ww-captain__followup">' + esc(data.follow_up) + "</p>");
+    if (data.follow_up) blocks.push('<p class="ww-captain__followup">' + esc(clean(data.follow_up)) + "</p>");
     blocks.push(chipsHtml(data.choices));
     return blocks.join("");
   }
@@ -251,7 +258,9 @@
     }
     function unlock() {
       locked = false;
+      if (chat) chat.classList.remove("is-locked");
       if (form) {
+        form.hidden = false;
         delete form.dataset.captainLocked;
         question.disabled = false;
         form.querySelector("button[type=submit]").disabled = false;
@@ -476,12 +485,23 @@
       form.dataset.captainLocked = "true";
       question.disabled = true;
       form.querySelector("button[type=submit]").disabled = true;
-      if (payload && payload.billing && payload.billing.canBuy) { chat.appendChild(buyBox(payload)); return; }
+      Array.prototype.forEach.call(root.querySelectorAll(".ww-captain__profile-nudge--hard"), function (n) { n.remove(); });
+      chat.classList.add("is-locked");
+      form.hidden = true;
+      var showBox = function (b) {
+        chat.appendChild(b);
+        setTimeout(function () {
+          messages.scrollTop = messages.scrollHeight;
+          b.scrollIntoView({ block: "end", behavior: "smooth" });
+        }, 60);
+      };
+      if (payload && payload.billing && payload.billing.canBuy) { showBox(buyBox(payload)); return; }
       var box = document.createElement("div");
       box.className = "ww-captain__profile-nudge ww-captain__profile-nudge--hard";
-      box.innerHTML = "<strong>Je gratis adviesvragen zijn op</strong><p>Maak gratis een bootprofiel aan: dan onthoudt Captain je boot en kun je verder met persoonlijk advies.</p>" +
+      var used = payload && payload.limit ? payload.limit : 2;
+      box.innerHTML = "<strong>Je " + esc(String(used)) + " gratis proefvragen zijn op</strong><p>Maak gratis een bootprofiel aan: dan onthoudt Captain je boot en krijg je elke dag 5 gratis adviesvragen.</p>" +
         '<div><a href="' + esc((payload && payload.profileUrl) || PROFILE_URL) + '">Bootprofiel aanmaken</a><a class="ww-captain__ghost" href="tel:+31513241911">Bel 0513-241911</a></div>';
-      chat.appendChild(box);
+      showBox(box);
     }
 
     function softNudge() {

@@ -113,3 +113,12 @@
 .ww-captain__consent{display:flex!important;gap:8px;align-items:flex-start;margin:6px 0 2px;font-size:12px;line-height:1.35;color:#3d566c;cursor:pointer}
 .ww-captain__consent input{width:16px;height:16px;margin:1px 0 0;flex:0 0 16px;accent-color:#0a74c9}
 .ww-captain__consent-offer{display:block;width:100%;margin:8px 0 2px;padding:10px 12px;border:1px dashed #0a74c9;border-radius:12px;background:#f4faff;color:#075eaa;font:inherit;font-size:13px;font-weight:800;text-align:left;cursor:pointer}
+
+/* vergrendeld: blok direct onder het gesprek, ook op mobiel goed in beeld */
+.ww-captain [data-captain-chat].is-locked .ww-captain__messages{max-height:min(42vh,360px)!important}
+.ww-captain [data-captain-chat].is-locked .ww-captain__profile-nudge--hard{margin:4px 0 8px}
+.ww-captain__profile-nudge--hard div{display:flex;flex-wrap:wrap;gap:8px}
+.ww-captain__profile-nudge--hard div a{flex:1 1 140px;text-align:center}
+@media (max-width:600px){
+  .ww-captain [data-captain-chat].is-locked .ww-captain__messages{max-height:34vh!important}
+}
