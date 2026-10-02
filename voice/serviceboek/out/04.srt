@@ -1,3 +1,4 @@
 1
-00:00:00,050 --> 00:00:06,644
+00:00:00,100 --> 00:00:05,965
 Vul in wat er gedaan is, de motoruren, wie het werk deed, en welke onderdelen zijn gebruikt.
+

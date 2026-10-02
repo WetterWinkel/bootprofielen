@@ -1,3 +1,8 @@
 1
-00:00:00,050 --> 00:00:07,076
-Tot slot de veiligheid. Klik op Bootprofiel opslaan, en je boot staat in je digitale bootdossier.
+00:00:00,100 --> 00:00:02,575
+Tot slot de veiligheid.
+
+2
+00:00:02,525 --> 00:00:07,261
+Klik op Bootprofiel opslaan, en je boot staat in je digitale bootdossier.
+

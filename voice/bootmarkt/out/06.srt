@@ -1,3 +1,8 @@
 1
-00:00:00,050 --> 00:00:13,028
-Na controle door WetterWinkel staat je boot dertig dagen gratis op Bootmarkt, met foto's, specificaties en vraagprijs. Reacties van kopers zie je direct in je account.
+00:00:00,100 --> 00:00:07,768
+Na controle door WetterWinkel staat je boot dertig dagen gratis op Bootmarkt, met foto's, specificaties en vraagprijs.
+
+2
+00:00:07,718 --> 00:00:11,312
+Reacties van kopers zie je direct in je account.
+

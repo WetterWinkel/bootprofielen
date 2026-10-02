@@ -1,3 +1,8 @@
 1
-00:00:00,050 --> 00:00:07,436
-Je boot verkopen? Dat doe je gratis en makkelijk vanuit je bootprofiel, via de WetterWinkel Bootmarkt.
+00:00:00,100 --> 00:00:02,239
+Je boot verkopen?
+
+2
+00:00:02,189 --> 00:00:07,321
+Dat doe je gratis en makkelijk vanuit je bootprofiel, via de WetterWinkel Bootmarkt.
+

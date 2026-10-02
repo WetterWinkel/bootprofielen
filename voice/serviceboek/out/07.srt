@@ -1,3 +1,8 @@
 1
-00:00:00,050 --> 00:00:09,740
-Exporteer je bootdossier als PDF, of draag je boot met serviceboek en al over aan de nieuwe eigenaar. Dat geeft kopers vertrouwen.
+00:00:00,100 --> 00:00:06,446
+Exporteer je bootdossier als PDF, of draag je boot met serviceboek en al over aan de nieuwe eigenaar.
+
+2
+00:00:06,396 --> 00:00:08,884
+Dat geeft kopers vertrouwen.
+

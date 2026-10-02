@@ -1,3 +1,8 @@
 1
-00:00:00,050 --> 00:00:09,212
-Klik op Onderhoud of werkzaamheden toevoegen. De motor uit je bootprofiel staat er al in: de DAF zes-vijftien.
+00:00:00,100 --> 00:00:03,441
+Klik op Onderhoud of werkzaamheden toevoegen.
+
+2
+00:00:03,391 --> 00:00:07,934
+De motor uit je bootprofiel staat er al in: de DAF zes-vijftien.
+
