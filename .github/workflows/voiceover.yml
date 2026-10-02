@@ -3,9 +3,16 @@ on:
   push:
     paths:
       - "voice/**/scenes/*.txt"
+      - "voice/**/engine.txt"
+      - "voice/**/instructions.txt"
+      - "voice/**/openai-voice.txt"
+      - ".github/workflows/voiceover.yml"
   workflow_dispatch:
 permissions:
   contents: write
+concurrency:
+  group: voiceover
+  cancel-in-progress: false
 jobs:
   tts:
     runs-on: ubuntu-latest
@@ -14,23 +21,54 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install edge-tts
+      - run: pip install edge-tts && sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Wacht op TTS-route (Render-deploy)
+        run: |
+          if ! grep -qs openai voice/*/engine.txt; then exit 0; fi
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /tmp/probe -w "%{http_code}" "https://bootprofielen.onrender.com/voice-tts/probe/99?ref=$GITHUB_SHA" || true)
+            if grep -qs "Scènetekst niet gevonden" /tmp/probe; then echo "route actief"; exit 0; fi
+            echo "nog niet klaar ($code), wachten..."; sleep 20
+          done
+          echo "route niet bereikbaar" ; exit 0
       - name: Genereer audio per scene
         run: |
           for dir in voice/*/; do
             [ -d "$dir/scenes" ] || continue
             mkdir -p "$dir/out"
-            voice=$(cat "$dir/voice.txt" 2>/dev/null || echo nl-NL-MaartenNeural)
-            rate=$(cat "$dir/rate.txt" 2>/dev/null || echo "+0%")
+            name=$(basename "$dir")
+            engine=$(cat "$dir/engine.txt" 2>/dev/null || echo edge)
+            rm -f "$dir/out/ERROR.txt"
             for f in "$dir"/scenes/*.txt; do
               n=$(basename "$f" .txt)
-              edge-tts --voice "$voice" --rate="$rate" -f "$f" --write-media "$dir/out/$n.mp3" --write-subtitles "$dir/out/$n.srt"
+              if [ "$engine" = "openai" ]; then
+                code=$(curl -s -o "/tmp/$name-$n.mp3" -w "%{http_code}" --max-time 120 "https://bootprofielen.onrender.com/voice-tts/$name/$n?ref=$GITHUB_SHA")
+                if [ "$code" != "200" ]; then
+                  echo "$n: HTTP $code $(head -c 600 /tmp/$name-$n.mp3)" >> "$dir/out/ERROR.txt"; continue
+                fi
+                # licht inkorten van stilte aan begin/eind
+                ffmpeg -y -v error -i "/tmp/$name-$n.mp3" -af "silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse" -c:a libmp3lame -q:a 2 "$dir/out/$n.mp3"
+                d=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$dir/out/$n.mp3")
+                python3 - "$f" "$d" "$dir/out/$n.srt" <<'PY'
+          import sys
+          text=open(sys.argv[1],encoding="utf-8").read().strip(); d=float(sys.argv[2])
+          def ts(t):
+              h=int(t//3600); m=int(t%3600//60); s=t%60
+              return "%02d:%02d:%06.3f"%(h,m,s)
+          open(sys.argv[3],"w",encoding="utf-8").write("1\n%s --> %s\n%s\n"%(ts(0.05).replace(".",","),ts(max(0.1,d-0.1)).replace(".",","),text))
+          PY
+              else
+                voice=$(cat "$dir/voice.txt" 2>/dev/null || echo nl-NL-MaartenNeural)
+                rate=$(cat "$dir/rate.txt" 2>/dev/null || echo "+0%")
+                edge-tts --voice "$voice" --rate="$rate" -f "$f" --write-media "$dir/out/$n.mp3" --write-subtitles "$dir/out/$n.srt"
+              fi
             done
           done
       - name: Commit resultaat
         run: |
           git config user.name "voiceover-bot"
           git config user.email "voiceover-bot@users.noreply.github.com"
-          git add voice/*/out
+          git add -A voice/*/out
           git diff --cached --quiet || git commit -m "Voice-over audio [skip ci]"
+          git pull --rebase -q origin main || true
           git push
