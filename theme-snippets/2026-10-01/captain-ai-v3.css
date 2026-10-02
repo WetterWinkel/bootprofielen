@@ -101,9 +101,10 @@
 
 /* betaalopties na 6 gratis vragen */
 .ww-captain__packs{display:grid;gap:8px;margin:10px 0 6px}
-.ww-captain__pack{display:grid;grid-template-columns:1fr auto;gap:2px 10px;width:100%;padding:11px 13px;border:1px solid #b9d3e5;border-radius:14px;background:#fff;color:#0b355a;font:inherit;text-align:left;cursor:pointer}
+.ww-captain__pack{display:block!important;width:100%;padding:11px 13px;border:1px solid #b9d3e5;border-radius:14px;background:#fff;color:#0b355a;font:inherit;text-align:left;cursor:pointer}
 .ww-captain__pack:hover{border-color:#0a74c9;background:#f1f9ff}
-.ww-captain__pack b{font-size:15px}.ww-captain__pack span{font-weight:900;color:#0a74c9;font-size:15px}
-.ww-captain__pack small{grid-column:1/-1;color:#5f7689;font-size:12px}
+.ww-captain__pack-top{display:flex!important;justify-content:space-between;align-items:baseline;gap:10px}
+.ww-captain__pack b{font-size:15px}.ww-captain__pack-top span{font-weight:900;color:#0a74c9;font-size:15px;white-space:nowrap}
+.ww-captain__pack small{display:block;margin-top:3px;color:#5f7689;font-size:12px;line-height:1.35}
 .ww-captain__pack[data-captain-pack="pass"]{border-color:#0a74c9;box-shadow:0 0 0 1px #0a74c9}
 .ww-captain__pack-note{font-size:11px!important;color:#5f7689!important;margin:4px 0 0!important}

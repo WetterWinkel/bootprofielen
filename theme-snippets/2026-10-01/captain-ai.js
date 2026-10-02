@@ -418,7 +418,7 @@
       var box = document.createElement("div");
       box.className = "ww-captain__profile-nudge ww-captain__profile-nudge--hard ww-captain__buy-box";
       var packs = (b.packs || []).map(function (p) {
-        return '<button type="button" class="ww-captain__pack" data-captain-pack="' + esc(p.id) + '"><b>' + esc(p.label) + '</b><span>' + esc(p.price) + '</span><small>' + esc(p.description) + '</small></button>';
+        return '<button type="button" class="ww-captain__pack" data-captain-pack="' + esc(p.id) + '"><span class="ww-captain__pack-top"><b>' + esc(p.label) + '</b><span>' + esc(p.price) + '</span></span><small>' + esc(p.description) + '</small></button>';
       }).join("");
       box.innerHTML = "<strong>Je 6 gratis vragen voor vandaag zijn op</strong><p>Ga direct verder met Captain AI, of stel morgen weer 6 gratis vragen.</p>" +
         '<div class="ww-captain__packs">' + packs + '</div><p class="ww-captain__pack-note">Je betaalt veilig via de WetterWinkel-kassa. Geen abonnement: de maandpas stopt vanzelf.</p>';
