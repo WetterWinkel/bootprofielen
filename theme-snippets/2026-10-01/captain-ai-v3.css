@@ -96,3 +96,5 @@
 .ww-captain__buy{display:grid;grid-template-columns:78px 1fr;gap:8px;align-items:end}
 .ww-captain__qty{display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:700;color:#5a7287}
 .ww-captain__qty input{width:100%;min-height:3.8rem;padding:.6rem;border:1px solid #aac8dc;border-radius:.8rem;font:inherit;font-size:16px;text-align:center;color:#123454;background:#fff}
+.ww-captain__product{grid-template-columns:1fr!important}
+.ww-captain__product-link span{font-size:14px;line-height:1.3}
