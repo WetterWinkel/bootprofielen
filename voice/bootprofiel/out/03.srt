@@ -1,8 +1,4 @@
 1
-00:00:00,100 --> 00:00:03,140
-Een bootprofiel maak je in een paar minuten.
-
-2
-00:00:03,090 --> 00:00:08,667
-Log in op je WetterWinkel-account, ga naar Mijn bootdossier en klik op Nieuwe boot toevoegen.
+00:00:00,100 --> 00:00:06,470
+Voeg een foto van je boot toe en vul de basisgegevens in: naam, merk, model en bouwjaar.
 

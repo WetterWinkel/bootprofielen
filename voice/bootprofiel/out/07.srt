@@ -1,8 +1,12 @@
 1
-00:00:00,100 --> 00:00:02,575
-Tot slot de veiligheid.
+00:00:00,100 --> 00:00:02,744
+Vanaf nu werkt alles samen.
 
 2
-00:00:02,525 --> 00:00:07,261
-Klik op Bootprofiel opslaan, en je boot staat in je digitale bootdossier.
+00:00:02,694 --> 00:00:09,653
+In het serviceboek houd je je onderhoud bij, en Captain AI adviseert volgens de onderhoudsgegevens van de fabrikant van jouw motor.
+
+3
+00:00:09,653 --> 00:00:12,706
+Zo heb je nooit meer achterstallig onderhoud.
 

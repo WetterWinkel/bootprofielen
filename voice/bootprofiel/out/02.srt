@@ -1,12 +1,8 @@
 1
-00:00:00,100 --> 00:00:05,268
-Captain AI haalt zijn advies uit de onderhoudsgegevens en handleidingen van de fabrikant.
+00:00:00,100 --> 00:00:04,078
+Log in op je WetterWinkel-account en ga naar Mijn bootdossier.
 
 2
-00:00:05,218 --> 00:00:11,504
-Met je bootprofiel en serviceboek weet hij precies welke motor je hebt, en wanneer de volgende beurt nodig is.
-
-3
-00:00:11,504 --> 00:00:14,569
-Zo heb je nooit meer achterstallig onderhoud.
+00:00:04,028 --> 00:00:06,648
+Klik op Nieuwe boot toevoegen.
 
