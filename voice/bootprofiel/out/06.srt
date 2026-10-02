@@ -1,8 +1,4 @@
 1
-00:00:00,100 --> 00:00:02,575
-Tot slot de veiligheid.
-
-2
-00:00:02,525 --> 00:00:07,261
-Klik op Bootprofiel opslaan, en je boot staat in je digitale bootdossier.
+00:00:00,100 --> 00:00:07,071
+Vul je vaargebied en ligplaats in, en vink je uitrusting aan: navigatie, comfort, elektra en dek.
 

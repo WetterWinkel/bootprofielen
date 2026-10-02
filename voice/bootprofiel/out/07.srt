@@ -1,8 +1,8 @@
 1
-00:00:00,100 --> 00:00:04,162
-Vanaf nu adviseert Captain AI op maat voor jouw boot.
+00:00:00,100 --> 00:00:02,575
+Tot slot de veiligheid.
 
 2
-00:00:04,112 --> 00:00:09,388
-Je houdt je onderhoud bij in het serviceboek, en je verkoopt je boot makkelijk via Bootmarkt.
+00:00:02,525 --> 00:00:07,261
+Klik op Bootprofiel opslaan, en je boot staat in je digitale bootdossier.
 

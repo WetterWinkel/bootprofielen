@@ -1,4 +1,8 @@
 1
-00:00:00,100 --> 00:00:07,071
-Vul je vaargebied en ligplaats in, en vink je uitrusting aan: navigatie, comfort, elektra en dek.
+00:00:00,100 --> 00:00:03,465
+Daarna de romp, de afmetingen en de motor.
+
+2
+00:00:03,415 --> 00:00:08,319
+Bij de Viskus is dat een DAF zes-vijftien diesel van honderdveertig pk.
 

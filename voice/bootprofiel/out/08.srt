@@ -1,4 +1,8 @@
 1
-00:00:00,100 --> 00:00:04,859
-Maak vandaag nog gratis je bootprofiel aan, op wetterwinkel punt en-el.
+00:00:00,100 --> 00:00:04,162
+Vanaf nu adviseert Captain AI op maat voor jouw boot.
+
+2
+00:00:04,112 --> 00:00:09,388
+Je houdt je onderhoud bij in het serviceboek, en je verkoopt je boot makkelijk via Bootmarkt.
 

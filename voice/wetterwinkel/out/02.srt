@@ -1,0 +1,8 @@
+1
+00:00:00,100 --> 00:00:05,725
+Captain AI geeft advies op basis van de onderhoudsgegevens en handleidingen van de fabrikant.
+
+2
+00:00:05,675 --> 00:00:09,545
+Hoe meer hij van jouw boot weet, hoe beter zijn advies.
+

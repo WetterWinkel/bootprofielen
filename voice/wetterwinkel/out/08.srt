@@ -1,0 +1,8 @@
+1
+00:00:00,100 --> 00:00:02,227
+Wil je verkopen?
+
+2
+00:00:02,177 --> 00:00:08,427
+Zet je boot gratis te koop op Bootmarkt, en draag je bootprofiel met serviceboek over aan de nieuwe eigenaar.
+
