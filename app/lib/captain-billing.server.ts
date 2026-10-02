@@ -12,16 +12,17 @@ function envInt(name: string, fallback: number) {
 export function captainPacks() {
   const passDays = envInt("CAPTAIN_PASS_DAYS", 30);
   const passPrice = envInt("CAPTAIN_PASS_PRICE_CENTS", 1000);
+  const passCredits = envInt("CAPTAIN_PASS_CREDITS", 35);
   const packCredits = envInt("CAPTAIN_PACK_CREDITS", 15);
   const packPrice = envInt("CAPTAIN_PACK_PRICE_CENTS", 500);
   return [
     {
       id: "pass",
-      title: `Maandpas – ${passDays} dagen onbeperkt`,
-      label: "Maandpas",
-      description: `${passDays} dagen onbeperkt vragen. Stopt vanzelf, geen abonnement.`,
+      title: `Captain AI-maandpas – ${passCredits} vragen in ${passDays} dagen`,
+      label: `Maandpas · ${passCredits} vragen`,
+      description: `${passCredits} adviesvragen, ${passDays} dagen geldig. Stopt vanzelf, geen abonnement.`,
       priceCents: passPrice,
-      credits: 0,
+      credits: passCredits,
       passDays,
       sku: `WW-CAPTAIN-PAS-${passDays}`,
     },
@@ -29,7 +30,7 @@ export function captainPacks() {
       id: "pack",
       title: `Captain AI-tegoed – ${packCredits} vragen`,
       label: `${packCredits} vragen`,
-      description: `${packCredits} extra adviesvragen, 12 maanden geldig.`,
+      description: `${packCredits} extra adviesvragen, geldig tot ze op zijn.`,
       priceCents: packPrice,
       credits: packCredits,
       passDays: 0,
@@ -38,28 +39,35 @@ export function captainPacks() {
   ];
 }
 
-export function passDailyLimit() {
-  // Redelijk gebruik binnen de maandpas, beschermt tegen misbruik.
-  return envInt("CAPTAIN_PASS_DAILY_LIMIT", 40);
-}
-
 export function euro(cents: number) {
   return `€ ${(cents / 100).toFixed(2).replace(".", ",")}`;
 }
 
 export async function captainBalance(shop: string, customerId: string) {
   if (!customerId || customerId.startsWith("anon:")) {
-    return { credits: 0, passUntil: null as Date | null, passActive: false };
+    return { credits: 0, passCredits: 0, passUntil: null as Date | null, passActive: false };
   }
   const row = await prisma.captainCreditBalance.findUnique({
     where: { shop_customerId: { shop, customerId } },
   });
   const passUntil = row?.passUntil ?? null;
+  const passValid = Boolean(passUntil && passUntil.getTime() > Date.now());
+  const passCredits = passValid ? row?.passCredits ?? 0 : 0;
   return {
     credits: row?.credits ?? 0,
+    passCredits,
     passUntil,
-    passActive: Boolean(passUntil && passUntil.getTime() > Date.now()),
+    passActive: passValid && passCredits > 0,
   };
+}
+
+/** Haalt één maandpasvraag af (alleen binnen de geldigheid). */
+export async function spendPassCredit(shop: string, customerId: string) {
+  const res = await prisma.captainCreditBalance.updateMany({
+    where: { shop, customerId, passCredits: { gt: 0 }, passUntil: { gt: new Date() } },
+    data: { passCredits: { decrement: 1 } },
+  });
+  return res.count > 0;
 }
 
 /** Haalt één tegoedvraag af. Geeft false als er geen tegoed meer is. */
@@ -159,13 +167,22 @@ export async function applyPaidCaptainPurchase(purchase: any, shop: string, paid
     const current = await tx.captainCreditBalance.findUnique({ where: key });
     let passUntil = current?.passUntil ?? null;
     if (purchase.passDays > 0) {
-      const base = passUntil && passUntil.getTime() > Date.now() ? passUntil.getTime() : Date.now();
+      // Maandpas: vragen gelden 30 dagen; een nieuwe pas tijdens een lopende pas telt op en verlengt.
+      const active = passUntil && passUntil.getTime() > Date.now();
+      const base = active ? passUntil!.getTime() : Date.now();
       passUntil = new Date(base + purchase.passDays * 24 * 60 * 60 * 1000);
+      const passCredits = (active ? current?.passCredits ?? 0 : 0) + purchase.credits;
+      await tx.captainCreditBalance.upsert({
+        where: key,
+        create: { shop, customerId: purchase.customerId, credits: 0, passCredits, passUntil },
+        update: { passCredits, passUntil },
+      });
+      return;
     }
     await tx.captainCreditBalance.upsert({
       where: key,
-      create: { shop, customerId: purchase.customerId, credits: purchase.credits, passUntil },
-      update: { credits: { increment: purchase.credits }, passUntil },
+      create: { shop, customerId: purchase.customerId, credits: purchase.credits },
+      update: { credits: { increment: purchase.credits } },
     });
   });
 }

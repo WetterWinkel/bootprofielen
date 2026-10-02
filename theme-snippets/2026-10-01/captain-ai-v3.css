@@ -108,3 +108,8 @@
 .ww-captain__pack small{display:block;margin-top:3px;color:#5f7689;font-size:12px;line-height:1.35}
 .ww-captain__pack[data-captain-pack="pass"]{border-color:#0a74c9;box-shadow:0 0 0 1px #0a74c9}
 .ww-captain__pack-note{font-size:11px!important;color:#5f7689!important;margin:4px 0 0!important}
+
+/* toestemming: 6 i.p.v. 4 gratis vragen */
+.ww-captain__consent{display:flex!important;gap:8px;align-items:flex-start;margin:6px 0 2px;font-size:12px;line-height:1.35;color:#3d566c;cursor:pointer}
+.ww-captain__consent input{width:16px;height:16px;margin:1px 0 0;flex:0 0 16px;accent-color:#0a74c9}
+.ww-captain__consent-offer{display:block;width:100%;margin:8px 0 2px;padding:10px 12px;border:1px dashed #0a74c9;border-radius:12px;background:#f4faff;color:#075eaa;font:inherit;font-size:13px;font-weight:800;text-align:left;cursor:pointer}

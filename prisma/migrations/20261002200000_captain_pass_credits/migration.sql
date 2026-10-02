@@ -1,0 +1,1 @@
+ALTER TABLE "CaptainCreditBalance" ADD COLUMN "passCredits" INTEGER NOT NULL DEFAULT 0;

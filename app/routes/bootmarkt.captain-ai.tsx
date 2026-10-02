@@ -9,16 +9,23 @@ import {
   captainPacks,
   createCaptainCheckout,
   euro,
-  passDailyLimit,
   reconcileCaptainPurchases,
   spendCredit,
+  spendPassCredit,
 } from "../lib/captain-billing.server";
 
 const METAFIELD_NAMESPACE = "$app";
 const METAFIELD_KEY = "bootprofielen";
 const MAX_MESSAGE_LENGTH = 1500;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const STOREFRONT_LIMIT = 6;
+const STOREFRONT_LIMIT = 6; // met toestemming om vragen anoniem te gebruiken
+const STOREFRONT_LIMIT_NO_CONSENT = 4;
+function freeLimit(consent: boolean) {
+  return consent ? STOREFRONT_LIMIT : STOREFRONT_LIMIT_NO_CONSENT;
+}
+function consentFrom(request: Request) {
+  return new URL(request.url).searchParams.get("consent") === "1";
+}
 const TRIAL_PROFILE_ID = "anonymous-trial";
 const UNPROFILED_PROFILE_ID = "account-without-profile";
 const PROFILE_URL = "/customer_authentication/redirect?locale=nl&region_country=NL";
@@ -182,7 +189,9 @@ async function usage(
   customerId: string,
   profileId: string,
   hasProfile: boolean,
+  consent = false,
 ) {
+  const limit = freeLimit(consent);
   const where: any = {
     role: "USER",
     usageType: "FREE",
@@ -202,28 +211,16 @@ async function usage(
 
   const used = await prisma.captainMessage.count({ where });
   return {
-    limit: STOREFRONT_LIMIT,
+    limit,
     used,
-    remaining: Math.max(0, STOREFRONT_LIMIT - used),
+    remaining: Math.max(0, limit - used),
   };
-}
-
-async function passUsedToday(shop: string, customerId: string) {
-  return prisma.captainMessage.count({
-    where: {
-      role: "USER",
-      usageType: "PASS",
-      createdAt: { gte: new Date(Date.now() - DAY_MS) },
-      conversation: { shop, customerId, channel: "STOREFRONT" },
-    },
-  });
 }
 
 // Bepaalt na de gratis vragen of de klant verder kan met maandpas of tegoed.
 async function paidAccess(shop: string, shopifyCustomerId: string, hasProfile: boolean) {
   const balance = await captainBalance(shop, shopifyCustomerId);
-  const passUsed = balance.passActive ? await passUsedToday(shop, shopifyCustomerId) : 0;
-  const passAvailable = hasProfile && balance.passActive && passUsed < passDailyLimit();
+  const passAvailable = hasProfile && balance.passActive;
   const creditAvailable = hasProfile && balance.credits > 0;
   return { balance, passAvailable, creditAvailable };
 }
@@ -239,9 +236,9 @@ function billingPayload(
     ? balance.passUntil.toLocaleDateString("nl-NL", { day: "numeric", month: "long", timeZone: "Europe/Amsterdam" })
     : "";
   let statusText = `Nog ${freeRemaining} gratis adviesvragen${hasProfile ? " vandaag" : ""}`;
-  if (freeRemaining <= 0 && balance.passActive) statusText = `Maandpas actief t/m ${date}`;
+  if (freeRemaining <= 0 && balance.passActive) statusText = `Maandpas: nog ${balance.passCredits} vragen t/m ${date}`;
   else if (freeRemaining <= 0 && balance.credits > 0) statusText = `Nog ${balance.credits} tegoedvragen`;
-  else if (freeRemaining > 0 && balance.passActive) statusText += ` · maandpas t/m ${date}`;
+  else if (freeRemaining > 0 && balance.passActive) statusText += ` · maandpas ${balance.passCredits} vragen`;
   else if (freeRemaining > 0 && balance.credits > 0) statusText += ` · ${balance.credits} tegoed`;
   return {
     canBuy: hasProfile && !isAnonymous,
@@ -355,14 +352,16 @@ function salesFlowText({
   remainingAfter,
   hasProfile,
   category,
+  limit = STOREFRONT_LIMIT,
 }: {
+  limit?: number;
   turn: number;
   remainingAfter: number;
   hasProfile: boolean;
   category: string;
 }) {
   return `WETTERWINKEL VERKOOPGESPREK — VERPLICHT
-Dit is klantbeurt ${turn} van maximaal ${STOREFRONT_LIMIT}. Na dit antwoord zijn nog ${remainingAfter} AI-beurten over.
+Dit is klantbeurt ${turn} van maximaal ${limit}. Na dit antwoord zijn nog ${remainingAfter} AI-beurten over.
 ${
   hasProfile
     ? "De klant heeft een echt bootprofiel. Gebruik bekende profielgegevens en vraag die niet opnieuw."
@@ -374,13 +373,13 @@ ${
 - Vraag niets opnieuw wat al uit deze conversatie, het echte bootprofiel of de huidige productpagina blijkt.
 - Wacht niet met verkopen tot elk detail bekend is: toon zodra technisch verantwoord alvast 1 tot 4 passende WetterWinkel-producten en benoem in het tekstadvies welke controle nog nodig is.
 - Zoek bij een hoofdproduct ook naar relevante upsell/cross-sell, maar selecteer alleen producten die werkelijk uit de WetterWinkel-catalogus komen en technisch logisch passen.
-- Laat op beurt 6 follow_up leeg en maak het antwoord afrondend: geef het beste advies en de beste productselectie die met de bekende gegevens mogelijk is. De interface neemt daarna de profieluitnodiging over.
+- Laat op beurt ${limit} follow_up leeg en maak het antwoord afrondend: geef het beste advies en de beste productselectie die met de bekende gegevens mogelijk is. De interface neemt daarna de profieluitnodiging over.
 
 ${categorySalesRules(category)}`;
 }
 
-function shouldOfferProfile(usedAfter: number, hasProfile: boolean) {
-  return !hasProfile && (usedAfter === 2 || usedAfter === 4 || usedAfter >= STOREFRONT_LIMIT);
+function shouldOfferProfile(usedAfter: number, hasProfile: boolean, limit = STOREFRONT_LIMIT) {
+  return !hasProfile && (usedAfter === 2 || usedAfter === 4 || usedAfter >= limit);
 }
 
 function conversationProfileId(profile: any, isAnonymous: boolean) {
@@ -392,6 +391,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   try {
     const { shop, customerId, shopifyCustomerId, isAnonymous, admin } =
       await storefrontContext(request);
+    const consent = consentFrom(request);
     const profiles = shopifyCustomerId
       ? await ownedProfiles(admin, shopifyCustomerId)
       : [];
@@ -404,6 +404,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       customerId,
       profileId,
       Boolean(profile),
+      consent,
     );
 
     const conversations = await prisma.captainConversation.findMany({
@@ -464,7 +465,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
       limitReached:
         currentUsage.remaining <= 0 && !access.passAvailable && !access.creditAvailable,
       billing: billingPayload(access, currentUsage.remaining, Boolean(profile), isAnonymous),
-      profilePrompt: shouldOfferProfile(currentUsage.used, Boolean(profile)),
+      consent,
+      consentBonus: STOREFRONT_LIMIT - STOREFRONT_LIMIT_NO_CONSENT,
+      profilePrompt: shouldOfferProfile(currentUsage.used, Boolean(profile), currentUsage.limit),
       profileUrl: PROFILE_URL,
       conversationId: recentConversation?.id || "",
       conversations: conversations.map((conversation) => ({
@@ -491,6 +494,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const { shop, customerId, shopifyCustomerId, isAnonymous, admin } =
       await storefrontContext(request);
     const body = await request.json();
+    const consent = consentFrom(request) || body.consent === true;
     const profiles = shopifyCustomerId
       ? await ownedProfiles(admin, shopifyCustomerId)
       : [];
@@ -555,12 +559,13 @@ export async function action({ request }: ActionFunctionArgs) {
       customerId,
       profileId,
       Boolean(profile),
+      consent,
     );
 
     const access = await paidAccess(shop, shopifyCustomerId, Boolean(profile));
     let usageType: "FREE" | "PASS" | "CREDIT" = "FREE";
     if (currentUsage.remaining <= 0) {
-      if (access.passAvailable) usageType = "PASS";
+      if (access.passAvailable && (await spendPassCredit(shop, shopifyCustomerId))) usageType = "PASS";
       else if (access.creditAvailable && (await spendCredit(shop, shopifyCustomerId))) usageType = "CREDIT";
     }
 
@@ -570,13 +575,15 @@ export async function action({ request }: ActionFunctionArgs) {
           success: false,
           limitReached: true,
           billing: billingPayload(access, 0, Boolean(profile), isAnonymous),
+          consent,
+          consentBonus: consent ? 0 : STOREFRONT_LIMIT - STOREFRONT_LIMIT_NO_CONSENT,
           profilePrompt: !profile,
           requiresProfile: !profile,
           profileUrl: PROFILE_URL,
           remaining: 0,
           message: profile
-            ? "Je 6 gratis adviesvragen voor vandaag zijn op. Ga direct verder met een maandpas of een vragenpakket, of stel morgen weer 6 gratis vragen."
-            : "U heeft de zes gratis Captain AI-adviesvragen gebruikt. Maak een gratis bootprofiel aan om Captain persoonlijk te maken en verder te kunnen met gerichter advies.",
+            ? `Je ${currentUsage.limit} gratis adviesvragen voor vandaag zijn op. Ga direct verder met een maandpas of een vragenpakket, of stel morgen weer gratis vragen.`
+            : "U heeft de gratis Captain AI-adviesvragen gebruikt. Maak een gratis bootprofiel aan om Captain persoonlijk te maken en verder te kunnen met gerichter advies.",
         },
         429,
       );
@@ -602,6 +609,7 @@ export async function action({ request }: ActionFunctionArgs) {
           profileId,
           channel: "STOREFRONT",
           boatContext: profile?.data || {},
+          improvementConsent: consent,
           title: profile ? "Webshopadvies" : "Webshopadvies proefmodus",
         },
         include: { messages: true },
@@ -626,6 +634,7 @@ ${salesFlowText({
       remainingAfter: paid ? STOREFRONT_LIMIT - 1 : remainingAfter,
       hasProfile: Boolean(profile),
       category,
+      limit: paid ? STOREFRONT_LIMIT : currentUsage.limit,
     })}`;
 
     const serviceEntries = profile
@@ -664,11 +673,11 @@ ${salesFlowText({
     });
     } catch (error) {
       // Mislukt antwoord: betaalde tegoedvraag teruggeven.
-      if (usageType === "CREDIT") {
+      if (usageType === "CREDIT" || usageType === "PASS") {
         await prisma.captainCreditBalance
           .update({
             where: { shop_customerId: { shop, customerId: shopifyCustomerId } },
-            data: { credits: { increment: 1 } },
+            data: usageType === "PASS" ? { passCredits: { increment: 1 } } : { credits: { increment: 1 } },
           })
           .catch(() => undefined);
       }
@@ -701,6 +710,7 @@ ${salesFlowText({
         data: {
           boatContext: profile?.data || {},
           title: rawMessage.slice(0, 80),
+          ...(consent ? { improvementConsent: true } : {}),
         },
       }),
     ]);
@@ -709,13 +719,15 @@ ${salesFlowText({
     const accessAfter = await paidAccess(shop, shopifyCustomerId, Boolean(profile));
     return json({
       success: true,
-      limit: STOREFRONT_LIMIT,
+      limit: currentUsage.limit,
+      consent,
+      consentBonus: STOREFRONT_LIMIT - STOREFRONT_LIMIT_NO_CONSENT,
       used: usedAfter,
       remaining: remainingAfter,
       limitReached:
         remainingAfter <= 0 && !accessAfter.passAvailable && !accessAfter.creditAvailable,
       billing: billingPayload(accessAfter, remainingAfter, Boolean(profile), isAnonymous),
-      profilePrompt: shouldOfferProfile(usedAfter, Boolean(profile)),
+      profilePrompt: shouldOfferProfile(usedAfter, Boolean(profile), currentUsage.limit),
       profileUrl: PROFILE_URL,
       hasProfile: Boolean(profile),
       conversationId: conversation.id,
