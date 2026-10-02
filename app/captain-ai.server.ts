@@ -796,24 +796,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
       "Captain AI kon nog geen antwoord maken. Probeer de vraag anders te formuleren.",
     );
 
-  // Inline bronvermeldingen als "([site](url))" weghalen: bronnen staan apart onder "Bronnen".
-  const cleanCitations = (value: any): any => {
-    if (typeof value === "string")
-      return value
-        .replace(/\s*\(\[[^\]]+\]\((https?:\/\/[^)\s]+)\)\)/g, "")
-        .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, "$1")
-        .replace(/\s+([.,;:])/g, "$1")
-        .trim();
-    if (Array.isArray(value)) return value.map(cleanCitations);
-    if (value && typeof value === "object")
-      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, cleanCitations(v)]));
-    return value;
-  };
-  try {
-    text = JSON.stringify(cleanCitations(JSON.parse(text)));
-  } catch {
-    text = cleanCitations(text);
-  }
+  text = cleanAnswerText(text);
 
   // Verbruik over alle rondes optellen (zoekrondes inbegrepen) voor een eerlijke kostenregistratie.
   const sumUsage = (key: "input_tokens" | "output_tokens") =>
@@ -827,4 +810,27 @@ export async function answerCaptainQuestion(input: CaptainInput) {
     inputTokens: sumUsage("input_tokens"),
     outputTokens: sumUsage("output_tokens"),
   };
+}
+
+
+// Inline bronvermeldingen als "([site](url))" weghalen: bronnen staan apart onder "Bronnen".
+function cleanCitations(value: any): any {
+  if (typeof value === "string")
+    return value
+      .replace(/\s*\(\[[^\]]+\]\((https?:\/\/[^)\s]+)\)\)/g, "")
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, "$1")
+      .replace(/\s+([.,;:])/g, "$1")
+      .trim();
+  if (Array.isArray(value)) return value.map(cleanCitations);
+  if (value && typeof value === "object")
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, cleanCitations(v)]));
+  return value;
+}
+
+export function cleanAnswerText(text: string) {
+  try {
+    return JSON.stringify(cleanCitations(JSON.parse(text)));
+  } catch {
+    return cleanCitations(String(text ?? ""));
+  }
 }

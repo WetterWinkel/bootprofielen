@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createHash } from "node:crypto";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { answerCaptainQuestion } from "../captain-ai.server";
+import { answerCaptainQuestion, cleanAnswerText } from "../captain-ai.server";
 import prisma from "../db.server";
 import { authenticate, unauthenticated } from "../shopify.server";
 import {
@@ -452,7 +452,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       .map((message: any) => ({
         id: message.id,
         role: message.role,
-        content: message.content,
+        content: message.role === "ASSISTANT" ? cleanAnswerText(message.content) : message.content,
         products: message.products || [],
       }));
 
