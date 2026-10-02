@@ -266,7 +266,7 @@ export function BoatMarketplace() {
             <s-checkbox label="Ik ben eigenaar of bevoegd om deze boot aan te bieden" checked={form.ownershipConfirmed} onChange={(event) => update('ownershipConfirmed', event.currentTarget.checked)} />
             <s-checkbox label="Ik accepteer de advertentievoorwaarden en verklaar dat de gegevens juist zijn" checked={form.termsAccepted} onChange={(event) => update('termsAccepted', event.currentTarget.checked)} />
             <s-link href="https://www.wetterwinkel.nl/apps/bootmarkt/voorwaarden" target="_blank">Advertentievoorwaarden bekijken</s-link>
-            <s-button variant="primary" onClick={() => run('checkout')} disabled={busy}>{listing?.status === 'REJECTED' ? 'Opnieuw gratis ter controle indienen' : 'Gratis ter controle indienen'}</s-button>}
+            <s-button variant="primary" onClick={() => run('checkout')} disabled={busy}>{listing?.status === 'REJECTED' ? 'Opnieuw gratis ter controle indienen' : 'Gratis ter controle indienen'}</s-button>
           </s-stack>}
 
           {listing?.status === 'ACTIVE' && <s-button onClick={() => run('sold')} disabled={busy}>Markeren als verkocht</s-button>}
