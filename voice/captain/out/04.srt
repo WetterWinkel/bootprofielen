@@ -3,10 +3,10 @@
 Sta je op een product?
 
 2
-00:00:02,297 --> 00:00:05,542
-Vraag dan gewoon: past dit op mijn boot?
+00:00:02,297 --> 00:00:05,879
+Vraag dan gewoon: is dit geschikt voor mijn boot?
 
 3
-00:00:05,542 --> 00:00:11,961
+00:00:05,879 --> 00:00:12,285
 Captain controleert de specificaties, stelt één slimme wedervraag, en laat zien wat je er nog bij nodig hebt.
 
