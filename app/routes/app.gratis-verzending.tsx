@@ -19,8 +19,8 @@ const FUNCTION_HANDLE = "gratis-verzending";
 async function zoekKorting(admin: any) {
   const res = await admin.graphql(
     `#graphql
-      query GratisVerzendingKorting($q: String!) {
-        automaticDiscountNodes(first: 5, query: $q) {
+      query GratisVerzendingKorting {
+        automaticDiscountNodes(first: 100) {
           nodes {
             id
             automaticDiscount {
@@ -29,7 +29,6 @@ async function zoekKorting(admin: any) {
           }
         }
       }`,
-    { variables: { q: `title:'${TITEL}'` } },
   );
   const json: any = await res.json();
   return (json.data?.automaticDiscountNodes?.nodes ?? []).find(
