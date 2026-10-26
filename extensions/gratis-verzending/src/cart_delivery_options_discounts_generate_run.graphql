@@ -12,6 +12,16 @@ query CartDeliveryOptionsDiscountsGenerateRunInput {
     }
     deliveryGroups {
       id
+      cartLines {
+        merchandise {
+          __typename
+          ... on ProductVariant {
+            product {
+              zwaar: hasAnyTag(tags: ["zwaar-pakket"])
+            }
+          }
+        }
+      }
       deliveryAddress {
         countryCode
       }

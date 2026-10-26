@@ -1,6 +1,7 @@
 // Gratis verzending voor de hele bestelling (NL/BE) zodra er minstens één
 // product met de tag "gratis-verzending" in de winkelwagen zit.
-// Duitsland en speciale bezorging (Alu-RIB op afspraak) blijven betaald.
+// Duitsland, speciale bezorging (Alu-RIB op afspraak) en pakketten met een
+// zwaar product (tag "zwaar-pakket") blijven betaald.
 
 const LANDEN = ["NL", "BE"];
 const UITGESLOTEN = /rib/i; // "Speciale RIB-bezorging op afspraak"
@@ -21,6 +22,11 @@ export function cartDeliveryOptionsDiscountsGenerateRun(input) {
   for (const group of input.cart.deliveryGroups) {
     const land = group.deliveryAddress?.countryCode;
     if (!land || !LANDEN.includes(land)) continue;
+    // Pakket met een zwaar product (tag "zwaar-pakket") nooit gratis.
+    const zwaar = (group.cartLines ?? []).some(
+      (l) => l.merchandise.__typename === "ProductVariant" && l.merchandise.product.zwaar,
+    );
+    if (zwaar) continue;
     for (const option of group.deliveryOptions) {
       if (UITGESLOTEN.test(option.title ?? "")) continue;
       candidates.push({
