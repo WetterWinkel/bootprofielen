@@ -7,6 +7,8 @@ import { unauthenticated } from "../shopify.server";
 // Kolommen: id (zoals de Shopify Google-app ze aanlevert) en shipping_label.
 //   gratis-verzending -> producten met de tag "gratis-verzending"
 //   zwaar-pakket      -> producten met de tag "zwaar-pakket" (gaat voor)
+//   rib-bezorging     -> tag "Speciale RIB-bezorging €129" (alleen NL, €129)
+// Kolom shipping: verzendkosten per land zoals de checkout ze rekent.
 // Merchant Center gebruikt shipping_label om per product het juiste
 // verzendtarief te tonen (gratis / zwaar pakket).
 
@@ -38,7 +40,7 @@ async function bouwFeed(): Promise<string> {
         }
       }`,
     {
-      q: `{ products(query: "tag:gratis-verzending OR tag:zwaar-pakket") { edges { node { id tags variants { edges { node { id } } } } } } }`,
+      q: `{ products(query: "tag:gratis-verzending OR tag:zwaar-pakket OR tag:'Speciale RIB-bezorging €129'") { edges { node { id tags variants { edges { node { id price } } } } } } }`,
     },
   );
   const fout = start.bulkOperationRunQuery.userErrors?.[0]?.message;
@@ -69,7 +71,7 @@ async function bouwFeed(): Promise<string> {
 
   const tekst = await (await fetch(url)).text();
   const labels = new Map<string, string>(); // product-id -> label
-  const regels = ["id\tshipping_label"];
+  const regels = ["id\tshipping_label\tshipping"];
   for (const regel of tekst.split("\n")) {
     if (!regel.trim()) continue;
     const r = JSON.parse(regel);
@@ -78,10 +80,20 @@ async function bouwFeed(): Promise<string> {
       if (!label) continue;
       const pid = r.__parentId.split("/").pop();
       const vid = String(r.id).split("/").pop();
-      regels.push(`shopify_ZZ_${pid}_${vid}\t${label}`);
+      const prijs = Number(r.price ?? 0);
+      const de = label === "zwaar-pakket" ? "29.95" : prijs >= 150 ? "0.00" : "9.95";
+      const ship =
+        label === "rib-bezorging"
+          ? "NL:::129.00 EUR"
+          : label === "zwaar-pakket"
+            ? `NL:::14.95 EUR,BE:::29.95 EUR,DE:::${de} EUR`
+            : `NL:::0.00 EUR,BE:::0.00 EUR,DE:::${de} EUR`;
+      regels.push(`shopify_ZZ_${pid}_${vid}\t${label}\t${ship}`);
     } else {
       const tags: string[] = r.tags ?? [];
-      const label = tags.includes("zwaar-pakket")
+      const label = tags.includes("Speciale RIB-bezorging €129")
+        ? "rib-bezorging"
+        : tags.includes("zwaar-pakket")
         ? "zwaar-pakket"
         : tags.includes("gratis-verzending")
           ? "gratis-verzending"
