@@ -1,0 +1,23 @@
+name: Shopify app deploy (extensies)
+# Handmatig starten via Actions > "Shopify app deploy" > Run workflow.
+# Nodig: repository secret SHOPIFY_CLI_PARTNERS_TOKEN (Partner Dashboard > Settings > CLI token).
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm i -g @shopify/cli@latest
+      - name: Function-afhankelijkheden
+        working-directory: extensions/gratis-verzending
+        run: npm install
+      - name: Deploy
+        env:
+          SHOPIFY_CLI_PARTNERS_TOKEN: ${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN }}
+          SHOPIFY_API_KEY: 47eb38dfb2e4337cb59c85e938937cc9
+        run: shopify app deploy --force --message "Gratis verzending function"

@@ -1,0 +1,37 @@
+query CartDeliveryOptionsDiscountsGenerateRunInput {
+  cart {
+    lines {
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          product {
+            hasAnyTag(tags: ["gratis-verzending"])
+          }
+        }
+      }
+    }
+    deliveryGroups {
+      id
+      cartLines {
+        merchandise {
+          __typename
+          ... on ProductVariant {
+            product {
+              zwaar: hasAnyTag(tags: ["zwaar-pakket"])
+            }
+          }
+        }
+      }
+      deliveryAddress {
+        countryCode
+      }
+      deliveryOptions {
+        handle
+        title
+      }
+    }
+  }
+  discount {
+    discountClasses
+  }
+}

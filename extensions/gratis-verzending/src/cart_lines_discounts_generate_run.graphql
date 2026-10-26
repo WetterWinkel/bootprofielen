@@ -1,0 +1,7 @@
+query CartLinesDiscountsGenerateRunInput {
+  cart {
+    lines {
+      id
+    }
+  }
+}
