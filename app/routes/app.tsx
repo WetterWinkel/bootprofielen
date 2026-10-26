@@ -21,6 +21,7 @@ export default function App() {
         <s-link href="/app">Home</s-link>
         <s-link href="/app/captain-ai">Captain AI</s-link>
         <s-link href="/app/bootmarkt">Bootmarkt</s-link>
+        <s-link href="/app/gratis-verzending">Gratis verzending</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>

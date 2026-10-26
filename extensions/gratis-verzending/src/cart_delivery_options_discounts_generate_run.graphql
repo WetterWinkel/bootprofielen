@@ -1,0 +1,27 @@
+query CartDeliveryOptionsDiscountsGenerateRunInput {
+  cart {
+    lines {
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          product {
+            hasAnyTag(tags: ["gratis-verzending"])
+          }
+        }
+      }
+    }
+    deliveryGroups {
+      id
+      deliveryAddress {
+        countryCode
+      }
+      deliveryOptions {
+        handle
+        title
+      }
+    }
+  }
+  discount {
+    discountClasses
+  }
+}
