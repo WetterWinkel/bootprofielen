@@ -21,7 +21,7 @@ def scene(head, sub, pill=True, card=True):
 {f'<div class=pill>{TRUCK}Gratis verzending</div>' if pill else ''}<div class=sub>{sub}</div>"""
 SCENES={
  "s1": scene("Gratis verzending op 14.000+ artikelen","Nederland en België"),
- "s2": scene("Groen label?<br>Geen verzendkosten.","Van Victron tot Jabsco"),
+ "s2": scene("Groen label?<br>Geen verzendkosten.","Van ankerlier tot toilet"),
  "s3": scene("Eén zo'n artikel in je mandje?","Dan gaat je héle bestelling gratis mee"),
  "s4": scene("20 dagen retour","Levering in 1–3 werkdagen"),
  "s5": BASE+f"""<div class=brand style="top:640px;font-size:110px">WetterWinkel.nl<small style="font-size:46px;margin-top:24px">alles voor uw boot</small></div>
@@ -37,9 +37,9 @@ background:linear-gradient(180deg,{NAVY},#0f3d68);color:white;position:relative;
 .pill{{position:absolute;bottom:150px;left:50%;transform:translateX(-50%);background:{GREEN};border-radius:999px;padding:20px 44px;font-size:42px;font-weight:800;display:flex;gap:18px;align-items:center;white-space:nowrap}}
 .sub{{position:absolute;bottom:70px;left:40px;right:40px;text-align:center;font-size:30px;color:#cfe4f5;font-weight:600}}
 </style><div class=brand>WetterWinkel.nl</div><div class=head>Gratis verzending op 14.000+ artikelen</div>
-<div class=cell style="top:330px;left:70px;height:600px"></div><div class=cell style="top:330px;left:560px;height:600px"></div>
+<div class=cell style="top:330px;left:70px;height:640px"></div><div class=cell style="top:330px;left:560px;height:640px"></div>
 <div class=pill>{TRUCK}1 artikel = hele bestelling gratis</div>
-<div class=sub>20 dagen retour · levering in 1–3 werkdagen · wetterwinkel.nl</div>"""
+<div class=sub>20 dagen retour · levering in 1–3 werkdagen</div>"""
 async def main():
     async with async_playwright() as p:
         b=await p.chromium.launch()

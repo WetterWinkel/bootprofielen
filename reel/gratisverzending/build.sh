@@ -23,6 +23,6 @@ done
 printf "%s\n" "${segs[@]}" > work/list.txt
 ffmpeg -y -v error -f concat -safe 0 -i work/list.txt -c copy -movflags +faststart out/reel.mp4
 ffmpeg -y -v error -i bg_post.png -i work/s1.jpg -i work/s2.jpg -filter_complex \
-  "[1:v]scale=410:540:force_original_aspect_ratio=decrease[a];[2:v]scale=410:540:force_original_aspect_ratio=decrease[b];[0:v][a]overlay=x=70+(450-w)/2:y=330+(600-h)/2[t];[t][b]overlay=x=560+(450-w)/2:y=330+(600-h)/2" \
+  "[1:v]scale=410:580:force_original_aspect_ratio=decrease[a];[2:v]scale=410:580:force_original_aspect_ratio=decrease[b];[0:v][a]overlay=x=70+(450-w)/2:y=330+(640-h)/2[t];[t][b]overlay=x=560+(450-w)/2:y=330+(640-h)/2" \
   -q:v 2 out/post.jpg
 ffprobe -v error -show_entries format=duration -of csv=p=0 out/reel.mp4
