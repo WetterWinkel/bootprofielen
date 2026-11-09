@@ -1,0 +1,25 @@
+name: WetterWinkel-app controle
+# Controleert de app-branch (build + typecheck) zonder iets te deployen.
+on:
+  push:
+    branches: [app]
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Build (zelfde als Render)
+        run: npm run build
+      - name: Typecheck nieuwe app-bestanden
+        run: |
+          npx react-router typegen
+          npx tsc --noEmit 2>&1 | tee tsc.log || true
+          if grep -E "wetter-app|bootmarkt\.app" tsc.log; then
+            echo "Typefouten in de nieuwe app-bestanden"; exit 1
+          fi
