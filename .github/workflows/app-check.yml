@@ -6,17 +6,12 @@ on:
   workflow_dispatch:
 jobs:
   build:
-    # Precies zoals de Dockerfile op Render: Node 20, zonder devDependencies.
+    # Precies zoals Render: dezelfde Dockerfile bouwen.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - run: npm ci --omit=dev
-      - run: npx prisma generate
-      - name: Build (zelfde als Render)
-        run: npm run build
+      - name: Docker build (zelfde als Render)
+        run: docker build -t bootprofielen-app-check .
   typecheck:
     runs-on: ubuntu-latest
     steps:
@@ -24,7 +19,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: npm ci
+      - run: npm install --no-audit --no-fund
       - run: npx prisma generate
       - name: Typecheck nieuwe app-bestanden
         run: |
