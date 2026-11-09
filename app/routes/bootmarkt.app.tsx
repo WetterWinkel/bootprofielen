@@ -109,8 +109,12 @@ async function context(request: Request) {
 export async function loader({ request }: LoaderFunctionArgs) {
   try {
     const { url, shop, rawCustomerId } = await context(request);
-    if (!rawCustomerId) return page(loginPage());
-    if (!previewAllowed(rawCustomerId)) return page("Niet gevonden", 404);
+    // Testfase: niet ingelogd of niet op de lijst = gewoon "niet gevonden",
+    // zodat buitenstaanders niet eens zien dat de app bestaat.
+    // Pas als de app voor iedereen open staat (APP_PREVIEW_CUSTOMER_IDS=*)
+    // krijgen niet-ingelogde bezoekers een inlogscherm.
+    if (!rawCustomerId && process.env.APP_PREVIEW_CUSTOMER_IDS === "*") return page(loginPage());
+    if (!rawCustomerId || !previewAllowed(rawCustomerId)) return page("Niet gevonden", 404);
 
     const { admin } = await unauthenticated.admin(shop);
     const customerId = customerGid(rawCustomerId);
@@ -153,8 +157,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export async function action({ request }: ActionFunctionArgs) {
   try {
     const { shop, rawCustomerId } = await context(request);
-    if (!rawCustomerId) return json({ success: false, message: "Log eerst in." }, 401);
-    if (!previewAllowed(rawCustomerId)) return json({ success: false }, 404);
+    if (!rawCustomerId || !previewAllowed(rawCustomerId)) return json({ success: false }, 404);
 
     const { admin } = await unauthenticated.admin(shop);
     const customerId = customerGid(rawCustomerId);
