@@ -97,6 +97,18 @@ function loginPage() {
   );
 }
 
+function comingSoonPage() {
+  return shell(
+    "WetterWinkel-app – binnenkort",
+    `<main class="ww-login">
+  <div class="ww-wordmark">WetterWinkel</div>
+  <h1>We bouwen hier een app voor maximaal watersportplezier</h1>
+  <p>Binnenkort beschikbaar. Tot die tijd vind je alles in onze webshop.</p>
+  <a class="ww-btn ww-btn-primary" href="/">Naar de webshop</a>
+</main>`,
+  );
+}
+
 async function context(request: Request) {
   await authenticate.public.appProxy(request);
   const url = new URL(request.url);
@@ -109,12 +121,12 @@ async function context(request: Request) {
 export async function loader({ request }: LoaderFunctionArgs) {
   try {
     const { url, shop, rawCustomerId } = await context(request);
-    // Testfase: niet ingelogd of niet op de lijst = gewoon "niet gevonden",
-    // zodat buitenstaanders niet eens zien dat de app bestaat.
+    // Testfase: niet ingelogd of niet op de lijst = "binnenkort"-pagina.
+    // Geen toegang tot gegevens of functies.
     // Pas als de app voor iedereen open staat (APP_PREVIEW_CUSTOMER_IDS=*)
     // krijgen niet-ingelogde bezoekers een inlogscherm.
     if (!rawCustomerId && process.env.APP_PREVIEW_CUSTOMER_IDS === "*") return page(loginPage());
-    if (!rawCustomerId || !previewAllowed(rawCustomerId)) return page("Niet gevonden", 404);
+    if (!rawCustomerId || !previewAllowed(rawCustomerId)) return page(comingSoonPage());
 
     const { admin } = await unauthenticated.admin(shop);
     const customerId = customerGid(rawCustomerId);
