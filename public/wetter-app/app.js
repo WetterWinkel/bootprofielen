@@ -19,6 +19,7 @@
     boat: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15l2 4h14l2-4H3z"/><path d="M12 3v12"/><path d="M12 4l6 9h-6"/></svg>',
     chat: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4V5z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg>',
     book: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4z"/><path d="M9 9h6M9 13h6"/></svg>',
+    share: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-3px"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v8h14v-8"/></svg>',
     search: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>',
     plus: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
     check: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>',
@@ -220,13 +221,22 @@
   function installHint() {
     var standalone = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
     if (standalone || ui.installHidden) return "";
-    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    var text = ios
-      ? "Zet de app op je beginscherm: tik op <strong>Delen</strong> en kies <strong>Zet op beginscherm</strong>."
-      : (deferredPrompt ? 'Zet de app op je beginscherm. <button type="button" class="ww-link" data-install>Installeren</button>'
-        : "Zet de app op je beginscherm via het browsermenu → <strong>App installeren</strong>.");
-    return '<div class="ww-install" style="margin-top:16px">' + ICON.boat + "<span>" + text +
-      '</span><button type="button" data-install-close aria-label="Sluiten">×</button></div>';
+    var ua = navigator.userAgent;
+    var ios = /iphone|ipad|ipod/i.test(ua);
+    var iosNotSafari = ios && /crios|fxios|edgios|instagram|fban|fbav/i.test(ua);
+    var steps;
+    if (deferredPrompt) {
+      steps = '<button type="button" class="ww-btn ww-btn-primary" data-install>Installeer de app</button>';
+    } else if (iosNotSafari) {
+      steps = "<ol class=\"ww-steps\"><li>Open deze pagina in <strong>Safari</strong></li><li>Tik op <strong>Delen</strong> " + ICON.share + "</li><li>Kies <strong>Zet op beginscherm</strong></li></ol>";
+    } else if (ios) {
+      steps = "<ol class=\"ww-steps\"><li>Tik onderin op <strong>Delen</strong> " + ICON.share + "</li><li>Scroll en kies <strong>Zet op beginscherm</strong></li><li>Tik op <strong>Voeg toe</strong></li></ol>";
+    } else {
+      steps = "<ol class=\"ww-steps\"><li>Open het menu <strong>⋮</strong> rechtsboven</li><li>Kies <strong>App installeren</strong> of <strong>Toevoegen aan startscherm</strong></li></ol>";
+    }
+    return '<section class="ww-install-card"><div class="ww-install-top"><img src="' + esc(S.iconUrl || "") + '" alt="" width="48" height="48">' +
+      '<div><strong>Zet WetterWinkel op je telefoon</strong><span>Eén tik en je bent aan boord.</span></div>' +
+      '<button type="button" data-install-close aria-label="Sluiten">×</button></div>' + steps + "</section>";
   }
 
   function shopScreen() {
