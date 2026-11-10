@@ -454,6 +454,7 @@
       '<div style="flex:1;min-width:0"><h1 style="font-size:19px;color:#fff">Vaarkaart</h1>' +
       '<button type="button" class="ww-airdraft" data-airdraft>' + (ad ? "Doorvaarthoogte boot: <strong>" + fmtM(ad) + "</strong> · wijzig" : "Stel je doorvaarthoogte in") + "</button></div>" +
       '<span class="ww-map-speed" data-speed hidden></span><button type="button" class="ww-btn ww-btn-amber ww-btn-sm" data-route-open>Route</button></header>' +
+      '<div class="ww-map-tools-left"><button type="button" class="ww-map-btn" data-layers aria-label="Kaartlagen">' + ICON.box + "</button></div>" +
       '<div class="ww-nav-bar" data-nav-bar hidden></div>' +
       '<div id="ww-map" class="ww-map" role="application" aria-label="Vaarkaart"></div>' +
       '<div class="ww-map-tools"><button type="button" class="ww-map-btn" data-follow aria-label="Volg mijn locatie">' + ICON.pin + "</button></div>" +
@@ -499,6 +500,124 @@
     return fetch(FIS_WFS + "&typeName=" + type + "&bbox=" + bbox).then(function (r) { return r.json(); }).then(function (d) { return d.features || []; });
   }
 
+  var LAYERS = [
+    ["bruggen", "Bruggen & sluizen", true],
+    ["havens", "Jachthavens", true],
+    ["kabels", "Hoogspanning & kabels", true],
+    ["diepte", "Vaardiepte", true],
+    ["snelheid", "Maximumsnelheid", false],
+    ["veer", "Veerponten", true],
+    ["helling", "Trailerhellingen", true],
+    ["meldpunt", "Marifoon-meldpunten", false],
+    ["horeca", "Restaurants & cafés", false]
+  ];
+  function layerOn(key) {
+    var saved = null;
+    try { saved = JSON.parse(storageGet("ww-layers") || "null"); } catch (e) { saved = null; }
+    if (saved && key in saved) return saved[key];
+    for (var i = 0; i < LAYERS.length; i++) if (LAYERS[i][0] === key) return LAYERS[i][2];
+    return false;
+  }
+  function setLayer(key, on) {
+    var saved = {};
+    try { saved = JSON.parse(storageGet("ww-layers") || "{}") || {}; } catch (e) { saved = {}; }
+    saved[key] = on; storageSet("ww-layers", JSON.stringify(saved));
+  }
+  function boatDraft() {
+    var n = parseFloat(String(boatField("diepgang") || "").replace(",", ".").replace(/[^0-9.]/g, ""));
+    return isFinite(n) && n > 0 && n < 10 ? n : null;
+  }
+  var poiTimer = null, lastPoiKey = "";
+  function loadPois() {
+    if (!map || !layerOn("horeca") || map.getZoom() < 14) return;
+    var b = map.getBounds();
+    var bbox = [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()].map(function (n) { return n.toFixed(3); }).join(",");
+    if (bbox === lastPoiKey) return;
+    lastPoiKey = bbox;
+    var q = '[out:json][timeout:20];(nwr["amenity"~"^(restaurant|cafe|pub|bar|fast_food|ice_cream)$"](' + bbox + ');nwr["leisure"="marina"](' + bbox + ');nwr["waterway"="fuel"](' + bbox + '););out center tags 150;';
+    fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        (d.elements || []).forEach(function (el) {
+          var lat = el.lat || (el.center && el.center.lat), lon = el.lon || (el.center && el.center.lon);
+          if (lat == null) return;
+          var tg = el.tags || {};
+          var kind = tg.leisure === "marina" ? "marina" : tg.waterway === "fuel" ? "fuel" : "poi";
+          addPoint(kind, "osm" + el.type + el.id, [lat, lon], tg, kind === "poi" ? "#B45309" : kind === "fuel" ? "#0F766E" : "#07345C", kind === "poi" ? 6 : 7);
+        });
+      })
+      .catch(function () { /* OSM tijdelijk niet bereikbaar */ });
+  }
+
+  function addPoint(kind, id, ll, props, color, radius) {
+    var key = kind + ":" + id;
+    if (mapObjects[key]) return;
+    var marker = L.circleMarker(ll, { radius: radius || 7, color: "#fff", weight: 2, fillColor: color, fillOpacity: 1 }).addTo(mapLayers);
+    props = props || {}; props.id = id;
+    marker.on("click", function () { openInfoSheet(kind, id); });
+    mapObjects[key] = { marker: marker, props: props, kind: kind };
+  }
+  function addLine(kind, f, color, dash) {
+    var p = f.properties || {}, key = kind + ":" + p.id;
+    if (mapObjects[key]) return;
+    var g = f.geometry || {};
+    var lines = g.type === "LineString" ? [g.coordinates] : g.type === "MultiLineString" ? g.coordinates : [];
+    if (!lines.length) return;
+    var latlngs = lines.map(function (line) { return line.map(function (c) { return [c[1], c[0]]; }); });
+    var poly = L.polyline(latlngs, { color: color, weight: 5, opacity: 0.6, dashArray: dash || null }).addTo(mapLayers);
+    poly.on("click", function () { openInfoSheet(kind, p.id); });
+    mapObjects[key] = { marker: poly, props: p, kind: kind };
+  }
+
+  function openInfoSheet(kind, id) {
+    var o = mapObjects[kind + ":" + id];
+    var sheet = document.querySelector("[data-map-sheet]");
+    if (!o || !sheet) return;
+    var p = o.props, title = p.name || "", sub = "", rows = [], extra = "";
+    var ad = airDraft(), dr = boatDraft();
+    if (kind === "cable") {
+      sub = p.type === "POWER_LINE" ? "Hoogspanningslijn" : "Bovengrondse kabel";
+      var ch = p.clearanceheight != null ? p.clearanceheight : p.height;
+      rows.push(["Vrije hoogte", fmtM(ch)]);
+      if (ad) rows.push(["Jouw boot", fmtM(ad)]);
+      if (ad && ch != null) extra = '<div class="ww-verdict" style="border-color:' + (ch >= ad + 1 ? "#16A34A" : "#DC2626") + '"><span style="background:' + (ch >= ad + 1 ? "#16A34A" : "#DC2626") + '"></span>' + (ch >= ad + 1 ? "Ruim voldoende hoogte" : "Let op: weinig of te weinig hoogte") + "</div>";
+      if (p.note) rows.push(["Opmerking", p.note]);
+    } else if (kind === "depth") {
+      title = "Vaardiepte"; sub = "Minimale diepte vaarweg";
+      var lo = Math.abs(p.minimaldepthlowerlimit != null ? p.minimaldepthlowerlimit : p.minimaldepthupperlimit);
+      rows.push(["Minimale diepte", fmtM(lo) + (p.referencelevel ? " (t.o.v. " + p.referencelevel + ")" : "")]);
+      if (dr) { rows.push(["Diepgang boot", fmtM(dr)]); extra = '<div class="ww-verdict" style="border-color:' + (lo >= dr + 0.2 ? "#16A34A" : "#DC2626") + '"><span style="background:' + (lo >= dr + 0.2 ? "#16A34A" : "#DC2626") + '"></span>' + (lo >= dr + 0.2 ? "Diep genoeg voor je boot" : "Let op: ondiep voor je boot") + "</div>"; }
+    } else if (kind === "speed") {
+      title = "Maximumsnelheid"; sub = "Vaarweg";
+      rows.push(["Max. snelheid", (p.calibratedspeedup || p.calibratedspeeddown || "?") + " km/u"]);
+    } else if (kind === "ferry") { sub = "Veerpont / veersteiger"; }
+    else if (kind === "slipway") { sub = "Trailerhelling"; if (p.amount) rows.push(["Aantal hellingen", p.amount]); }
+    else if (kind === "callpoint") {
+      sub = "Marifoon-meldpunt";
+      var ch2 = []; try { ch2 = JSON.parse(p.vhfchannels || "[]"); } catch (e) { ch2 = []; }
+      if (ch2.length) rows.push(["Marifoonkanaal", ch2.join(" / ")]);
+    } else if (kind === "poi" || kind === "marina" || kind === "fuel") {
+      title = p.name || (kind === "marina" ? "Jachthaven" : kind === "fuel" ? "Tankstation (water)" : "Horeca");
+      var typeNl = { restaurant: "Restaurant", cafe: "Café", pub: "Kroeg", bar: "Bar", fast_food: "Snackbar", ice_cream: "IJs" };
+      sub = kind === "marina" ? "Jachthaven (OpenStreetMap)" : kind === "fuel" ? "Brandstof aan het water" : (typeNl[p.amenity] || "Horeca") + (p.cuisine ? " · " + p.cuisine.replace(/;/g, ", ") : "");
+      if (p.opening_hours) rows.push(["Open", p.opening_hours]);
+      if (p["addr:street"]) rows.push(["Adres", p["addr:street"] + " " + (p["addr:housenumber"] || "") + (p["addr:city"] ? ", " + p["addr:city"] : "")]);
+      if (p.phone || p["contact:phone"]) extra += '<a class="ww-btn ww-btn-primary ww-btn-sm" href="tel:' + esc(String(p.phone || p["contact:phone"]).replace(/[^0-9+]/g, "")) + '">Bel</a> ';
+      var web = p.website || p["contact:website"];
+      if (web && /^https?:/.test(web)) extra += '<a class="ww-btn ww-btn-ghost ww-btn-sm" href="' + esc(web) + '" target="_blank" rel="noopener">Website</a>';
+      if (extra) extra = '<div class="ww-sheet-actions">' + extra + "</div>";
+    }
+    var ll = o.marker.getLatLng ? o.marker.getLatLng() : o.marker.getBounds().getCenter();
+    var canFav = kind === "poi" || kind === "marina" || kind === "slipway" || kind === "ferry" || kind === "fuel";
+    sheet.innerHTML = '<div class="ww-sheet-map-head"><div><strong>' + esc(title) + '</strong><span class="ww-small">' + esc(sub) + "</span></div>" +
+      '<button type="button" class="ww-link" data-close-map-sheet aria-label="Sluiten" style="font-size:22px;min-width:44px;min-height:44px">×</button></div>' + extra +
+      (rows.length ? '<div class="ww-list">' + rows.map(function (r) { return '<div class="ww-list-row"><span>' + esc(r[0]) + "</span><span>" + esc(r[1]) + "</span></div>"; }).join("") + "</div>" : "") +
+      '<div class="ww-sheet-actions"><button type="button" class="ww-btn ww-btn-primary ww-btn-sm" data-route-to="' + ll.lat.toFixed(5) + "," + ll.lng.toFixed(5) + '" data-route-label="' + esc(title) + '">Vaar hierheen</button>' +
+      (canFav ? '<button type="button" class="ww-btn ww-btn-ghost ww-btn-sm" data-fav="' + ll.lat.toFixed(5) + "," + ll.lng.toFixed(5) + '" data-fav-label="' + esc(title) + '">' + (isFav(ll.lat, ll.lng) ? "★ Favoriet" : "☆ Bewaar") + "</button>" : "") + "</div>" +
+      '<p class="ww-small" style="margin:0;opacity:.8">Bron: ' + (kind === "poi" || kind === "marina" || kind === "fuel" ? "OpenStreetMap" : "Rijkswaterstaat") + ". Controleer ter plaatse.</p>";
+    sheet.hidden = false;
+  }
+
   function loadMapData() {
     if (!map) return;
     var hint = document.querySelector("[data-map-hint]");
@@ -506,9 +625,11 @@
     if (z < 11) { if (hint) { hint.hidden = false; hint.textContent = "Zoom in om bruggen en sluizen te zien"; } return; }
     if (hint) { hint.hidden = false; hint.textContent = "Laden…"; }
     var b = map.getBounds().pad(0.15);
-    var types = ["brug", "opening", "sluis_v"];
-    if (z >= 12) types.push("jachthaven_p");
-    Promise.all(types.map(function (t) { return wfs(t, b).catch(function () { return []; }); }))
+    var types = ["brug", "opening", "sluis_v", "jachthaven_p", "bovengrondse_kabel", "vaarwegdiepte", "navigatiesnelheid", "veersteiger_p", "trailerhelling_p", "meldpunt"];
+    var want = { brug: layerOn("bruggen"), opening: layerOn("bruggen"), sluis_v: layerOn("bruggen"), jachthaven_p: layerOn("havens") && z >= 12,
+      bovengrondse_kabel: layerOn("kabels"), vaarwegdiepte: layerOn("diepte"), navigatiesnelheid: layerOn("snelheid"), veersteiger_p: layerOn("veer"),
+      trailerhelling_p: layerOn("helling"), meldpunt: layerOn("meldpunt") };
+    Promise.all(types.map(function (t) { return want[t] ? wfs(t, b).catch(function () { return []; }) : Promise.resolve([]); }))
       .then(function (res) {
         var openings = res[1] || [];
         openings.forEach(function (f) {
@@ -520,6 +641,21 @@
         (res[0] || []).forEach(function (f) { addObject("bridge", f); });
         (res[2] || []).forEach(function (f) { addObject("lock", f); });
         (res[3] || []).forEach(function (f) { addObject("harbour", f); });
+        var ad = airDraft(), dr = boatDraft();
+        (res[4] || []).forEach(function (f) {
+          var p = f.properties || {}, ch = p.clearanceheight != null ? p.clearanceheight : p.height;
+          var c = f.geometry && f.geometry.coordinates;
+          if (c) addPoint("cable", p.id, [c[1], c[0]], p, ad && ch != null && ch < ad + 1 ? "#DC2626" : "#CA8A04", 6);
+        });
+        (res[5] || []).forEach(function (f) {
+          var p = f.properties || {}, lo = Math.abs(p.minimaldepthlowerlimit != null ? p.minimaldepthlowerlimit : (p.minimaldepthupperlimit || 0));
+          addLine("depth", f, dr && lo < dr + 0.2 ? "#DC2626" : "#0EA5E9", "6 6");
+        });
+        (res[6] || []).forEach(function (f) { addLine("speed", f, "#9333EA", "2 8"); });
+        [[7, "ferry", "#0F766E"], [8, "slipway", "#475569"], [9, "callpoint", "#BE185D"]].forEach(function (cfg) {
+          (res[cfg[0]] || []).forEach(function (f) { var c = f.geometry && f.geometry.coordinates; if (c && f.geometry.type === "Point") addPoint(cfg[1], f.properties.id, [c[1], c[0]], f.properties, cfg[2], 6); });
+        });
+        clearTimeout(poiTimer); poiTimer = setTimeout(loadPois, 400);
         if (hint) hint.hidden = true;
       })
       .catch(function () { if (hint) { hint.hidden = false; hint.textContent = "Vaarwegdata niet bereikbaar"; } });
@@ -592,7 +728,11 @@
         '<div class="ww-spec"><span class="ww-small">Jouw boot</span><span>' + (airDraft() ? fmtM(airDraft()) : '<button type="button" class="ww-link" data-airdraft>Instellen</button>') + "</span></div></div>";
     }
     if (kind === "harbour") {
-      html += '<p class="ww-small" style="margin:0">' + esc([p.longstayplaces ? p.longstayplaces + " vaste ligplaatsen" : "", p.shortstayplaces ? p.shortstayplaces + " passantenplaatsen" : "", p.suppliesfuel === "Yes" ? "brandstof" : ""].filter(Boolean).join(" · ")) + "</p>";
+      var hl = o.marker.getLatLng();
+      html += '<div class="ww-list"><div class="ww-list-row"><span>Passantenplaatsen</span><span>' + (p.shortstayplaces || "onbekend") + '</span></div><div class="ww-list-row"><span>Vaste ligplaatsen</span><span>' + (p.longstayplaces || "onbekend") + '</span></div><div class="ww-list-row"><span>Brandstof</span><span>' + (p.suppliesfuel === "Yes" ? "Ja" : "Nee / onbekend") + "</span></div></div>" +
+        '<div class="ww-sheet-actions"><button type="button" class="ww-btn ww-btn-primary ww-btn-sm" data-route-to="' + hl.lat.toFixed(5) + "," + hl.lng.toFixed(5) + '" data-route-label="' + esc(p.name || "Jachthaven") + '">Vaar hierheen</button>' +
+        '<button type="button" class="ww-btn ww-btn-ghost ww-btn-sm" data-fav="' + hl.lat.toFixed(5) + "," + hl.lng.toFixed(5) + '" data-fav-label="' + esc(p.name || "Jachthaven") + '">' + (isFav(hl.lat, hl.lng) ? "★ Favoriet" : "☆ Bewaar") + "</button></div>" +
+        '<p class="ww-small" style="margin:0;opacity:.8">Bron: Rijkswaterstaat.</p>';
     } else {
       html += '<div data-times><p class="ww-small" style="margin:0">Bedieningstijden laden…</p></div>';
     }
@@ -659,6 +799,34 @@
   }
 
 
+  // ---------- Favorieten ----------
+  function favs() { try { return JSON.parse(storageGet("ww-favs") || "[]") || []; } catch (e) { return []; } }
+  function isFav(lat, lon) { return favs().some(function (f) { return Math.abs(f.lat - lat) < 0.0002 && Math.abs(f.lon - lon) < 0.0002; }); }
+  function toggleFav(lat, lon, label) {
+    var list = favs();
+    var i = -1;
+    list.forEach(function (f, k) { if (Math.abs(f.lat - lat) < 0.0002 && Math.abs(f.lon - lon) < 0.0002) i = k; });
+    if (i >= 0) { list.splice(i, 1); toast("Verwijderd uit favorieten"); }
+    else { list.unshift({ lat: lat, lon: lon, label: label || "Favoriet", at: Date.now() }); toast("Bewaard als favoriet"); }
+    storageSet("ww-favs", JSON.stringify(list.slice(0, 30)));
+  }
+
+  // ---------- Gesproken aanwijzingen ----------
+  var spoken = {};
+  function voiceOn() { return storageGet("ww-voice") !== "0"; }
+  function say(text) {
+    if (!voiceOn() || !window.speechSynthesis) return;
+    try {
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = "nl-NL"; u.rate = 1;
+      var nl = (window.speechSynthesis.getVoices() || []).filter(function (v) { return /^nl/i.test(v.lang); })[0];
+      if (nl) u.voice = nl;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    } catch (e) { /* geen spraak */ }
+  }
+  function spokenDistance(m) { return m >= 1000 ? (Math.round(m / 100) / 10).toString().replace(".", ",") + " kilometer" : (Math.round(m / 50) * 50) + " meter"; }
+
   // ---------- Routeplanner ----------
   var route = { from: null, to: null, data: null, line: null, marks: null, nav: false, loading: false };
   function speedKn() { var n = parseFloat(String(storageGet("ww-speed") || "6").replace(",", ".")); return isFinite(n) && n > 0 ? n : 6; }
@@ -679,7 +847,7 @@
       '<form class="ww-route-form" data-route-form>' +
       '<label class="ww-field">Van<input type="search" name="from" placeholder="' + esc(from) + '" autocomplete="off" data-geo="from"></label>' +
       '<label class="ww-field">Naar<input type="search" name="to" placeholder="' + esc(to) + '" autocomplete="off" data-geo="to"' + (route.to ? ' value="' + esc(route.to.label) + '"' : "") + "></label>" +
-      '<div class="ww-geo-results" data-geo-results></div>' +
+      '<div class="ww-geo-results" data-geo-results>' + favs().slice(0, 6).map(function (f, i) { return '<button type="button" class="ww-geo-item" data-fav-pick="' + i + '">★ ' + esc(f.label) + "</button>"; }).join("") + "</div>" +
       '<div class="ww-row2"><label class="ww-field">Snelheid (knopen)<input type="text" inputmode="decimal" name="speed" value="' + esc(String(speedKn()).replace(".", ",")) + '"></label>' +
       '<label class="ww-field">Doorvaarthoogte<input type="text" inputmode="decimal" name="air" value="' + esc(airDraft() ? String(airDraft()).replace(".", ",") : "") + '" placeholder="m"></label></div>' +
       '<button type="submit" class="ww-btn ww-btn-primary">Plan route</button></form>';
@@ -796,7 +964,8 @@
       eta.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }) + "</strong><span>aankomst</span></div></div>" +
       '<p class="ww-small" style="margin:0">' + opens.length + " brug" + (opens.length === 1 ? "" : "gen") + " moet" + (opens.length === 1 ? "" : "en") + " open · " + locks.length + " slui" + (locks.length === 1 ? "s" : "zen") + " · " + under.length + (under.length === 1 ? " brug" : " bruggen") + " waar je onderdoor past" +
       (r.air ? "" : ' · <button type="button" class="ww-link" data-airdraft>doorvaarthoogte instellen</button>') + "</p>" +
-      '<button type="button" class="ww-btn ww-btn-primary" data-nav-start>Start navigatie</button>';
+      '<button type="button" class="ww-btn ww-btn-primary" data-nav-start>Start navigatie</button>' +
+      '<button type="button" class="ww-btn ww-btn-ghost ww-btn-sm" data-save-dest style="width:100%">' + (isFav(route.to.lat, route.to.lon) ? "★ Bewaard" : "☆ Bewaar bestemming") + "</button>";
     var list = r.objects.filter(function (o) { return o.kind === "lock" || o.mustOpen; });
     if (list.length) {
       html += '<div class="ww-list">' + list.map(function (o) {
@@ -833,10 +1002,22 @@
     var pos = distToRoute(me);
     var left = Math.max(0, route.data.distanceM - pos.alongM);
     var next = route.data.objects.filter(function (o) { return (o.kind === "lock" || o.mustOpen) && o.atM > pos.alongM; })[0];
-    bar.innerHTML = "<strong>" + fmtKm(left) + "</strong> te gaan · ±" + fmtDur(left / 1852 / speedKn() * 60) +
+    if (next) {
+      var dn = next.atM - pos.alongM;
+      [1000, 300, 80].forEach(function (th) {
+        var key = next.kind + next.id + ":" + th;
+        if (dn <= th && dn > th / 3 && !spoken[key]) {
+          spoken[key] = true;
+          say("Over " + spokenDistance(dn) + ", " + (next.name || (next.kind === "lock" ? "sluis" : "brug")) + "." + (next.kind === "lock" ? " Sluis." : " Deze brug moet open."));
+        }
+      });
+    }
+    if (pos.offM > 150 && !spoken.off) { spoken.off = true; say("Je bent van de route af."); }
+    if (pos.offM < 60) spoken.off = false;
+    bar.innerHTML = '<button type="button" class="ww-voice" data-voice aria-label="Spraak aan of uit">' + (voiceOn() ? "🔊" : "🔇") + "</button><strong>" + fmtKm(left) + "</strong> te gaan · ±" + fmtDur(left / 1852 / speedKn() * 60) +
       (next ? "<br>Over " + fmtKm(next.atM - pos.alongM) + ": " + esc(next.name || "brug") + (next.kind === "lock" ? " (sluis)" : " (moet open)") : "") +
       (pos.offM > 150 ? '<br><span style="color:#FCD34D">Je bent ' + Math.round(pos.offM) + " m van de route</span>" : "");
-    if (left < 60) { bar.innerHTML = "<strong>Je bent er!</strong> Welkom in " + esc(route.to.label); route.nav = false; }
+    if (left < 60) { bar.innerHTML = "<strong>Je bent er!</strong> Welkom in " + esc(route.to.label); route.nav = false; say("Je bent er. Welkom in " + route.to.label); }
   }
 
   function shopScreen() {
@@ -1176,6 +1357,30 @@
     if (t.hasAttribute("data-boat")) {
       window.location.href = S.appPath + "?boot=" + encodeURIComponent(t.getAttribute("data-boat")) + "#boot"; return;
     }
+    if (t.hasAttribute("data-layers")) {
+      var ls = document.querySelector("[data-map-sheet]"); if (!ls) return;
+      ls.innerHTML = '<div class="ww-sheet-map-head"><div><strong>Kaartlagen</strong></div><button type="button" class="ww-link" data-close-map-sheet aria-label="Sluiten" style="font-size:22px;min-width:44px;min-height:44px">×</button></div>' +
+        LAYERS.map(function (l) { return '<label class="ww-toggle"><input type="checkbox" data-layer="' + l[0] + '"' + (layerOn(l[0]) ? " checked" : "") + "><span>" + esc(l[1]) + "</span></label>"; }).join("") +
+        '<p class="ww-small" style="margin:0">Horeca zie je als je dichtbij inzoomt. Bronnen: Rijkswaterstaat en OpenStreetMap.</p>';
+      ls.hidden = false; return;
+    }
+    if (t.hasAttribute("data-voice")) { storageSet("ww-voice", voiceOn() ? "0" : "1"); if (voiceOn()) say("Spraak aan"); updateNavBar(); return; }
+    if (t.hasAttribute("data-route-to")) {
+      var rt = t.getAttribute("data-route-to").split(",").map(Number);
+      route.to = { label: t.getAttribute("data-route-label") || "Bestemming", lat: rt[0], lon: rt[1] };
+      planRoute(); return;
+    }
+    if (t.hasAttribute("data-fav")) {
+      var fv = t.getAttribute("data-fav").split(",").map(Number);
+      toggleFav(fv[0], fv[1], t.getAttribute("data-fav-label"));
+      t.textContent = isFav(fv[0], fv[1]) ? "★ Favoriet" : "☆ Bewaar"; return;
+    }
+    if (t.hasAttribute("data-fav-pick")) {
+      var fp = favs()[Number(t.getAttribute("data-fav-pick"))];
+      if (fp) { route.to = { label: fp.label, lat: fp.lat, lon: fp.lon }; var ti = document.querySelector('[data-geo="to"]'); if (ti) ti.value = fp.label; }
+      return;
+    }
+    if (t.hasAttribute("data-save-dest") && route.to) { toggleFav(route.to.lat, route.to.lon, route.to.label); t.textContent = isFav(route.to.lat, route.to.lon) ? "★ Bewaard" : "☆ Bewaar bestemming"; return; }
     if (t.hasAttribute("data-route-open")) { e.preventDefault(); openRoutePanel(); return; }
     if (t.hasAttribute("data-route-here")) { if (map) map.closePopup(); planRoute(); return; }
     if (t.hasAttribute("data-route-clear")) { clearRoute(); var rs = document.querySelector("[data-map-sheet]"); if (rs) rs.hidden = true; return; }
@@ -1195,7 +1400,8 @@
       return;
     }
     if (t.hasAttribute("data-nav-start")) {
-      route.nav = true; following = true;
+      route.nav = true; following = true; spoken = {};
+      say("Navigatie gestart naar " + route.to.label + ".");
       var fb = document.querySelector("[data-follow]"); if (fb) fb.classList.add("is-on");
       var ns = document.querySelector("[data-map-sheet]"); if (ns) ns.hidden = true;
       if (!meMarker) startWatch(true); else map.setView(meMarker.getLatLng(), 15);
@@ -1253,6 +1459,14 @@
     if (t.hasAttribute("data-install") && deferredPrompt) {
       deferredPrompt.prompt();
       deferredPrompt.userChoice.then(function () { deferredPrompt = null; render(); });
+    }
+  });
+
+  root.addEventListener("change", function (e) {
+    var el = e.target;
+    if (el && el.hasAttribute && el.hasAttribute("data-layer")) {
+      setLayer(el.getAttribute("data-layer"), el.checked);
+      if (map && mapLayers) { mapLayers.clearLayers(); mapObjects = {}; lastPoiKey = ""; loadMapData(); }
     }
   });
 

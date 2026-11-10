@@ -254,3 +254,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ww-nav-bar[hidden] { display: none; }
 .ww-map-head .ww-btn-sm { flex-shrink: 0; }
 .ww-nav-bar:not([hidden]) ~ .ww-map-legend { display: none; }
+
+.ww-map-tools-left { position: absolute; right: 12px; top: calc(128px + var(--safe-t)); z-index: 1000; }
+.ww-map-screen .leaflet-top.leaflet-right { top: 106px; }
+.ww-toggle { display: flex; align-items: center; gap: 12px; min-height: 44px; font-size: 15px; border-bottom: 1px solid #E9EEF2; }
+.ww-toggle input { width: 22px; height: 22px; accent-color: var(--teal); }
+.ww-voice { float: right; background: rgba(255,255,255,.15); border: 0; color: #fff; border-radius: 8px; width: 40px; height: 36px; margin: -2px -4px 0 8px; font-size: 18px; cursor: pointer; }
