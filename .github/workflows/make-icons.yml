@@ -1,0 +1,68 @@
+name: App-iconen maken (eenmalig)
+on:
+  push:
+    branches: [app]
+    paths: [".github/workflows/make-icons.yml"]
+permissions:
+  contents: write
+jobs:
+  icons:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: app
+      - run: pip install pillow
+      - run: |
+          curl -sL "https://cdn.shopify.com/s/files/1/1035/9495/0996/files/8ab183bf-319f-4e98-9b12-df45ce6862b2.png?v=1780527341" -o /tmp/logo.png
+          python3 - <<'PY'
+          from PIL import Image, ImageChops
+          im = Image.open("/tmp/logo.png").convert("RGBA")
+          bg = Image.new("RGBA", im.size, (255,255,255,255))
+          flat = Image.alpha_composite(bg, im).convert("RGB")
+          def trim(img):
+              diff = ImageChops.difference(img, Image.new("RGB", img.size, (255,255,255)))
+              diff = diff.point(lambda v: 255 if v > 18 else 0)
+              box = diff.getbbox()
+              return img.crop(box) if box else img
+          logo = trim(flat)
+          print("logo", flat.size, "->", logo.size)
+          out = "public/wetter-app/"
+          logo.save(out + "logo-trim.png")
+          # Variant A: volledig logo op wit
+          def square(img, size, fill):
+              canvas = Image.new("RGB", (size, size), (255,255,255))
+              w, h = img.size
+              scale = min(size * fill / w, size * fill / h)
+              r = img.resize((max(1,int(w*scale)), max(1,int(h*scale))), Image.LANCZOS)
+              canvas.paste(r, ((size - r.size[0]) // 2, (size - r.size[1]) // 2))
+              return canvas
+          # Variant B: alleen de boot (linkerdeel van het logo)
+          w, h = logo.size
+          cols = []
+          px = logo.load()
+          for x in range(w):
+              cols.append(sum(1 for y in range(h) if sum(px[x, y]) < 700))
+          # zoek eerste lege kolomgroep na de boot
+          start = next(i for i, c in enumerate(cols) if c > 0)
+          cut = None
+          run = 0
+          for x in range(start + int(w * 0.15), w):
+              run = run + 1 if cols[x] == 0 else 0
+              if run >= max(3, int(w * 0.01)):
+                  cut = x - run + 1
+                  break
+          boat = trim(logo.crop((0, 0, cut or int(w * 0.45), h)))
+          print("boat crop", boat.size, "cut", cut)
+          boat.save(out + "logo-boat.png")
+          for s in (180, 192, 512):
+              square(logo, s, 0.9).save(out + f"icon-full-{s}.png")
+              square(boat, s, 0.78).save(out + f"icon-boat-{s}.png")
+          PY
+          ls -la public/wetter-app/
+      - run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add public/wetter-app/*.png
+          git commit -m "App-iconen uit het WetterWinkel-logo"
+          git push origin app
