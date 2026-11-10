@@ -569,6 +569,49 @@
     mapObjects[key] = { marker: poly, props: p, kind: kind };
   }
 
+  function hoursNl(h) {
+    var map = { Mo: "ma", Tu: "di", We: "wo", Th: "do", Fr: "vr", Sa: "za", Su: "zo", PH: "feestdagen", off: "gesloten", closed: "gesloten",
+      Jan: "jan", Feb: "feb", Mar: "mrt", Apr: "apr", May: "mei", Jun: "jun", Jul: "jul", Aug: "aug", Sep: "sep", Oct: "okt", Nov: "nov", Dec: "dec" };
+    return String(h).replace(/24\/7/g, "dag en nacht").replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su|PH|off|closed|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/g, function (m) { return map[m]; }).replace(/;\s*/g, "; ");
+  }
+  function contactHtml(tg) {
+    var rows = [], btns = [];
+    var hours = tg.opening_hours || tg["seamark:harbour:opening_hours"];
+    if (hours) rows.push(["Openingstijden", hoursNl(hours)]);
+    var phone = tg.phone || tg["contact:phone"] || tg["contact:mobile"];
+    var mail = tg.email || tg["contact:email"];
+    var web = tg.website || tg["contact:website"] || tg.url;
+    var vhf = tg.vhf || tg["seamark:radio_station:channel"] || tg["communication:vhf"];
+    if (vhf) rows.push(["Marifoon", "kanaal " + String(vhf).replace(/;/g, " / ")]);
+    if (tg["addr:street"]) rows.push(["Adres", tg["addr:street"] + " " + (tg["addr:housenumber"] || "") + (tg["addr:city"] ? ", " + tg["addr:city"] : "")]);
+    if (phone) { rows.push(["Telefoon", phone]); btns.push('<a class="ww-btn ww-btn-primary ww-btn-sm" href="tel:' + esc(String(phone).split(";")[0].replace(/[^0-9+]/g, "")) + '">Bel</a>'); }
+    if (mail) btns.push('<a class="ww-btn ww-btn-ghost ww-btn-sm" href="mailto:' + esc(String(mail).split(";")[0]) + '">Mail</a>');
+    if (web && /^https?:/.test(web)) btns.push('<a class="ww-btn ww-btn-ghost ww-btn-sm" href="' + esc(web) + '" target="_blank" rel="noopener">Website</a>');
+    return (rows.length ? '<div class="ww-list">' + rows.map(function (r) { return '<div class="ww-list-row"><span>' + esc(r[0]) + "</span><span>" + esc(r[1]) + "</span></div>"; }).join("") + "</div>" : "") +
+      (btns.length ? '<div class="ww-sheet-actions">' + btns.join("") + "</div>" : "");
+  }
+  function loadHarbourContact(ll, name) {
+    var q = '[out:json][timeout:15];nwr(around:400,' + ll.lat.toFixed(5) + "," + ll.lng.toFixed(5) + ')["leisure"="marina"];out center tags 5;';
+    fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var box = document.querySelector("[data-harbour-contact]");
+        if (!box) return;
+        var els = (d.elements || []).filter(function (el) { return el.tags; });
+        var words = String(name).toLowerCase().split(/[^a-z0-9à-ÿ]+/).filter(function (w) { return w.length > 3 && w !== "jachthaven"; });
+        els.sort(function (a, b) {
+          var sa = words.filter(function (w) { return String(a.tags.name || "").toLowerCase().indexOf(w) >= 0; }).length;
+          var sb = words.filter(function (w) { return String(b.tags.name || "").toLowerCase().indexOf(w) >= 0; }).length;
+          var ca = (a.tags.phone || a.tags["contact:phone"] || a.tags.website || a.tags["contact:website"]) ? 1 : 0;
+          var cb = (b.tags.phone || b.tags["contact:phone"] || b.tags.website || b.tags["contact:website"]) ? 1 : 0;
+          return (sb * 2 + cb) - (sa * 2 + ca);
+        });
+        var html = els.length ? contactHtml(els[0].tags) : "";
+        box.innerHTML = html || '<p class="ww-small" style="margin:0">Geen openingstijden of contactgegevens bekend.</p>';
+      })
+      .catch(function () { var box = document.querySelector("[data-harbour-contact]"); if (box) box.innerHTML = '<p class="ww-small" style="margin:0">Contactgegevens nu niet bereikbaar.</p>'; });
+  }
+
   function openInfoSheet(kind, id) {
     var o = mapObjects[kind + ":" + id];
     var sheet = document.querySelector("[data-map-sheet]");
@@ -600,12 +643,7 @@
       title = p.name || (kind === "marina" ? "Jachthaven" : kind === "fuel" ? "Tankstation (water)" : "Horeca");
       var typeNl = { restaurant: "Restaurant", cafe: "Café", pub: "Kroeg", bar: "Bar", fast_food: "Snackbar", ice_cream: "IJs" };
       sub = kind === "marina" ? "Jachthaven (OpenStreetMap)" : kind === "fuel" ? "Brandstof aan het water" : (typeNl[p.amenity] || "Horeca") + (p.cuisine ? " · " + p.cuisine.replace(/;/g, ", ") : "");
-      if (p.opening_hours) rows.push(["Open", p.opening_hours]);
-      if (p["addr:street"]) rows.push(["Adres", p["addr:street"] + " " + (p["addr:housenumber"] || "") + (p["addr:city"] ? ", " + p["addr:city"] : "")]);
-      if (p.phone || p["contact:phone"]) extra += '<a class="ww-btn ww-btn-primary ww-btn-sm" href="tel:' + esc(String(p.phone || p["contact:phone"]).replace(/[^0-9+]/g, "")) + '">Bel</a> ';
-      var web = p.website || p["contact:website"];
-      if (web && /^https?:/.test(web)) extra += '<a class="ww-btn ww-btn-ghost ww-btn-sm" href="' + esc(web) + '" target="_blank" rel="noopener">Website</a>';
-      if (extra) extra = '<div class="ww-sheet-actions">' + extra + "</div>";
+      extra = contactHtml(p) || '<p class="ww-small" style="margin:0">Geen openingstijden of contactgegevens bekend.</p>';
     }
     var ll = o.marker.getLatLng ? o.marker.getLatLng() : o.marker.getBounds().getCenter();
     var canFav = kind === "poi" || kind === "marina" || kind === "slipway" || kind === "ferry" || kind === "fuel";
@@ -732,13 +770,14 @@
       html += '<div class="ww-list"><div class="ww-list-row"><span>Passantenplaatsen</span><span>' + (p.shortstayplaces || "onbekend") + '</span></div><div class="ww-list-row"><span>Vaste ligplaatsen</span><span>' + (p.longstayplaces || "onbekend") + '</span></div><div class="ww-list-row"><span>Brandstof</span><span>' + (p.suppliesfuel === "Yes" ? "Ja" : "Nee / onbekend") + "</span></div></div>" +
         '<div class="ww-sheet-actions"><button type="button" class="ww-btn ww-btn-primary ww-btn-sm" data-route-to="' + hl.lat.toFixed(5) + "," + hl.lng.toFixed(5) + '" data-route-label="' + esc(p.name || "Jachthaven") + '">Vaar hierheen</button>' +
         '<button type="button" class="ww-btn ww-btn-ghost ww-btn-sm" data-fav="' + hl.lat.toFixed(5) + "," + hl.lng.toFixed(5) + '" data-fav-label="' + esc(p.name || "Jachthaven") + '">' + (isFav(hl.lat, hl.lng) ? "★ Favoriet" : "☆ Bewaar") + "</button></div>" +
-        '<p class="ww-small" style="margin:0;opacity:.8">Bron: Rijkswaterstaat.</p>';
+        '<div data-harbour-contact><p class="ww-small" style="margin:0">Contactgegevens zoeken…</p></div>' +
+        '<p class="ww-small" style="margin:0;opacity:.8">Bron: Rijkswaterstaat en OpenStreetMap.</p>';
     } else {
       html += '<div data-times><p class="ww-small" style="margin:0">Bedieningstijden laden…</p></div>';
     }
     sheet.innerHTML = html;
     sheet.hidden = false;
-    if (kind === "harbour") return;
+    if (kind === "harbour") { loadHarbourContact(o.marker.getLatLng(), p.name || ""); return; }
     fetch(S.appPath + "/vaardata?type=" + kind + "&id=" + encodeURIComponent(id), { credentials: "same-origin", headers: { Accept: "application/json" } })
       .then(function (r) { return r.json(); })
       .then(function (d) {
