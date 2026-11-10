@@ -10,12 +10,12 @@ export async function loader() {
     start_url: "/apps/bootmarkt/app",
     scope: "/",
     display: "standalone",
-    background_color: "#F3F6F9",
+    background_color: "#FFFFFF",
     theme_color: "#0B2E4A",
     icons: [
-      { src: `${base}/icon-192.png`, sizes: "192x192", type: "image/png" },
-      { src: `${base}/icon-512.png`, sizes: "512x512", type: "image/png" },
-      { src: `${base}/icon-512.png`, sizes: "512x512", type: "image/png", purpose: "maskable" },
+      { src: `${base}/icon-192.png?v=2`, sizes: "192x192", type: "image/png" },
+      { src: `${base}/icon-512.png?v=2`, sizes: "512x512", type: "image/png" },
+      { src: `${base}/icon-512.png?v=2`, sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
   return new Response(JSON.stringify(manifest), {

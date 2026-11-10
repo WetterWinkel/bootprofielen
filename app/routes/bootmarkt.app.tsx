@@ -20,7 +20,7 @@ import {
 } from "../lib/wetter-app.server";
 
 const APP_PATH = "/apps/bootmarkt/app";
-const ASSET_VERSION = "8";
+const ASSET_VERSION = "9";
 
 function assetBase() {
   return `${(process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "")}/wetter-app`;
@@ -69,8 +69,8 @@ function shell(title: string, inner: string, state?: unknown) {
 <meta name="apple-mobile-web-app-title" content="WetterWinkel">
 <title>${html(title)}</title>
 <link rel="manifest" href="${APP_PATH}/manifest.webmanifest">
-<link rel="apple-touch-icon" href="${base}/icon-180.png">
-<link rel="icon" type="image/png" href="${base}/icon-192.png">
+<link rel="apple-touch-icon" href="${base}/icon-180.png?v=${ASSET_VERSION}">
+<link rel="icon" type="image/png" href="${base}/icon-192.png?v=${ASSET_VERSION}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap">
 <link rel="stylesheet" href="${base}/app.css?v=${ASSET_VERSION}">
