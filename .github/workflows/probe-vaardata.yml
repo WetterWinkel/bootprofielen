@@ -1,0 +1,36 @@
+name: Probe vaardata (tijdelijk)
+on:
+  push:
+    branches: [app]
+    paths: [".github/workflows/probe-vaardata.yml"]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: FIS WFS capabilities
+        run: |
+          curl -s "https://geo.rijkswaterstaat.nl/services/ogc/gdr/fis_vnds/ows?service=WFS&version=2.0.0&request=GetCapabilities" -o caps.xml; ls -la caps.xml
+          grep -o "<Name>[^<]*</Name>" caps.xml | head -60
+          grep -io "outputformat[^/]*json[^<]*" caps.xml | sort -u | head
+          grep -io "<ows:Fees>[^<]*\|<ows:AccessConstraints>[^<]*" caps.xml | head
+      - name: FIS bridges (opening) bbox Friesland as GeoJSON
+        run: |
+          curl -s "https://geo.rijkswaterstaat.nl/services/ogc/gdr/fis_vnds/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=opening&outputFormat=application/json&count=3&srsName=EPSG:4326&bbox=52.9,5.6,53.1,5.9,EPSG:4326" | head -c 3000; echo
+          curl -sI "https://geo.rijkswaterstaat.nl/services/ogc/gdr/fis_vnds/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=opening&outputFormat=application/json&count=1" | grep -i "access-control\|content-type"
+      - name: FIS bridge feature type
+        run: |
+          for t in bridge brug bridge_v lock sluis operatingtimes; do echo "== $t"; curl -s "https://geo.rijkswaterstaat.nl/services/ogc/gdr/fis_vnds/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=$t&outputFormat=application/json&count=1" | head -c 1500; echo; done
+      - name: VNDS REST dataservice
+        run: |
+          curl -s "https://www.vaarweginformatie.nl/wfswms/dataservice/1.4/geogeneration" ; echo
+          G=$(curl -s "https://www.vaarweginformatie.nl/wfswms/dataservice/1.4/geogeneration" | grep -o '"GeoGeneration":[0-9]*' | cut -d: -f2); echo "gen=$G"
+          curl -s "https://www.vaarweginformatie.nl/wfswms/dataservice/1.4/$G/bridge?count=1" | head -c 2500; echo
+          curl -s "https://www.vaarweginformatie.nl/wfswms/dataservice/1.4/$G/operatingtimes?count=1" | head -c 2500; echo
+          curl -sI "https://www.vaarweginformatie.nl/wfswms/dataservice/1.4/geogeneration" | grep -i "access-control\|content-type"
+      - name: NDW brugopeningen
+        run: |
+          curl -s "https://opendata.ndw.nu/" | grep -io 'href="[^"]*brug[^"]*"' | head
+          curl -s -o brug.gz "https://opendata.ndw.nu/brugopeningen.xml.gz"; ls -la brug.gz; (gunzip -c brug.gz | head -c 3000) || true; echo
+      - name: PDOK NWB vaarwegen OGC API
+        run: |
+          curl -s "https://api.pdok.nl/rws/nationaal-wegenbestand-vaarwegen/ogc/v1/collections/vaarwegvakken/items?f=json&limit=1&bbox=5.6,52.9,5.9,53.1" | head -c 2500; echo
