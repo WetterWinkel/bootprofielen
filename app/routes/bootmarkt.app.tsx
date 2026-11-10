@@ -20,7 +20,7 @@ import {
 } from "../lib/wetter-app.server";
 
 const APP_PATH = "/apps/bootmarkt/app";
-const ASSET_VERSION = "2";
+const ASSET_VERSION = "3";
 
 function assetBase() {
   return `${(process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "")}/wetter-app`;

@@ -20,6 +20,13 @@
     chat: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4V5z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg>',
     book: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4z"/><path d="M9 9h6M9 13h6"/></svg>',
     share: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-3px"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v8h14v-8"/></svg>',
+    home: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>',
+    wind: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h11a3 3 0 1 0-3-3"/><path d="M3 12h16a3 3 0 1 1-3 3"/><path d="M3 16h7"/></svg>',
+    market: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12l-8 8-9-9V3h8l9 9z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
+    box: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>',
+    user: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4.5 3.5-7 8-7s7.2 2.5 8 7"/></svg>',
+    back: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
+    pin: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>',
     search: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>',
     plus: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
     check: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>',
@@ -43,7 +50,11 @@
   ];
 
   var ui = {
-    tab: "shop",
+    tab: "home",
+    weather: null,
+    weatherLoading: false,
+    weatherError: "",
+    place: null,
     cartCount: 0,
     search: "",
     searchResults: null,
@@ -239,6 +250,171 @@
       '<button type="button" data-install-close aria-label="Sluiten">×</button></div>' + steps + "</section>";
   }
 
+
+  var LOGO_URL = "https://cdn.shopify.com/s/files/1/1035/9495/0996/files/8ab183bf-319f-4e98-9b12-df45ce6862b2.png?v=1780527341";
+
+  function homeScreen() {
+    var boats = S.boats || [];
+    var boat = currentBoat();
+    var login = S.firstName || S.loggedIn
+      ? '<div class="ww-login-row">' + ICON.user + "<span>Ingelogd als <strong>" + esc(S.firstName || "klant") + '</strong></span><a class="ww-link" href="/account">Mijn account</a></div>'
+      : '<div class="ww-login-row"><a class="ww-btn ww-btn-primary" href="/account/login?return_url=' + encodeURIComponent(S.appPath) + '">Inloggen</a></div>';
+    var cart = '<a class="ww-icon-btn ww-icon-btn-light" href="/cart" aria-label="Winkelwagen">' + ICON.bag +
+      '<span class="ww-badge" data-cart-badge' + (ui.cartCount ? "" : " hidden") + ">" + ui.cartCount + "</span></a>";
+    var head = '<header class="ww-home-head"><div class="ww-home-top"><span style="width:44px"></span>' +
+      '<img class="ww-logo" src="' + LOGO_URL + '" alt="WetterWinkel – voor maximaal watersportplezier" width="600" height="300">' + cart + "</div>" + login + "</header>";
+
+    var captain = '<section class="ww-section"><form class="ww-captain-hero" data-home-ask>' +
+      '<div class="ww-captain-hero-top"><span class="ww-avatar">' + ICON.captain + '</span><div><strong>Ahoy' + (S.firstName ? " " + esc(S.firstName) : "") +
+      '! Ik ben Captain AI.</strong><span>Waarmee kunnen we je helpen?</span></div></div>' +
+      '<div class="ww-composer-row"><label class="sr-only" for="ww-home-q">Vraag het Captain AI</label>' +
+      '<input id="ww-home-q" type="text" enterkeyhint="send" maxlength="1500" placeholder="Bijv. welke impeller past op mijn motor?" autocomplete="off">' +
+      '<button type="submit" class="ww-send ww-send-amber" aria-label="Verstuur">' + ICON.send + "</button></div></form></section>";
+
+    var boatsLabel = boats.length > 1 ? "Uw boten" : "Uw boot";
+    var boatSub = boat ? boat.name + (boats.length > 1 ? " +" + (boats.length - 1) : "") : "Maak je bootprofiel";
+    var w = ui.weather && ui.weather.current;
+    var tiles = [
+      { href: "#vaarinfo", icon: "wind", title: "Actuele vaarinformatie", sub: w ? Math.round(w.wind_speed_10m) + " kn · " + beaufort(w.wind_speed_10m) + " Bft " + windDir(w.wind_direction_10m) : "Wind, weer, bruggen & sluizen", big: true },
+      { href: "#boot", icon: "boat", title: boatsLabel, sub: boatSub },
+      { href: "#shop", icon: "bag", title: "Shoppen", sub: "30.000+ artikelen" },
+      { href: "/apps/bootmarkt", icon: "market", title: "Bootmarkt", sub: "Boten kopen & verkopen" },
+      { href: "#service", icon: "book", title: "Serviceboek", sub: (S.entries || []).length ? (S.entries.length + " registraties") : "Onderhoud bijhouden" },
+      { href: "/account", icon: "box", title: "Bestellingen", sub: "Status & facturen" },
+      { href: "#captain", icon: "chat", title: "Captain AI", sub: "Je AI-schipper" }
+    ];
+    var grid = '<section class="ww-section"><div class="ww-tiles">' + tiles.map(function (t) {
+      return '<a class="ww-tile' + (t.big ? " ww-tile-big" : "") + '" href="' + esc(t.href) + '"><span class="ww-tile-icon">' + (ICON[t.icon] || "") + "</span>" +
+        '<span class="ww-tile-title">' + esc(t.title) + '</span><span class="ww-tile-sub">' + esc(t.sub) + "</span></a>";
+    }).join("") + "</div></section>";
+
+    return head + installHint() + captain + grid;
+  }
+
+  // ---------- Vaarinformatie (Open-Meteo, testfase) ----------
+  var WMO = { 0: "Onbewolkt", 1: "Overwegend helder", 2: "Half bewolkt", 3: "Bewolkt", 45: "Mist", 48: "Mist met rijp",
+    51: "Lichte motregen", 53: "Motregen", 55: "Dichte motregen", 61: "Lichte regen", 63: "Regen", 65: "Zware regen",
+    66: "IJzel", 67: "Zware ijzel", 71: "Lichte sneeuw", 73: "Sneeuw", 75: "Zware sneeuw", 80: "Lichte buien", 81: "Buien",
+    82: "Zware buien", 85: "Sneeuwbuien", 86: "Zware sneeuwbuien", 95: "Onweer", 96: "Onweer met hagel", 99: "Zwaar onweer met hagel" };
+  function beaufort(kn) {
+    var limits = [1, 4, 7, 11, 17, 22, 28, 34, 41, 48, 56, 64];
+    for (var i = 0; i < limits.length; i++) if (kn < limits[i]) return i;
+    return 12;
+  }
+  function windDir(deg) {
+    var dirs = ["N", "NNO", "NO", "ONO", "O", "OZO", "ZO", "ZZO", "Z", "ZZW", "ZW", "WZW", "W", "WNW", "NW", "NNW"];
+    return dirs[Math.round(((Number(deg) % 360) / 22.5)) % 16];
+  }
+  function loadWeather(lat, lon, label) {
+    ui.weatherLoading = true; ui.weatherError = "";
+    ui.place = { lat: lat, lon: lon, label: label };
+    if (ui.tab === "vaarinfo") render();
+    var base = "latitude=" + lat.toFixed(3) + "&longitude=" + lon.toFixed(3) + "&timezone=Europe%2FAmsterdam";
+    var url = "https://api.open-meteo.com/v1/forecast?" + base +
+      "&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation" +
+      "&hourly=wind_speed_10m,wind_gusts_10m,wind_direction_10m,precipitation_probability,temperature_2m" +
+      "&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_gusts_10m_max,sunrise,sunset" +
+      "&wind_speed_unit=kn&forecast_days=3";
+    var marineUrl = "https://marine-api.open-meteo.com/v1/marine?" + base + "&current=wave_height,wave_direction,wave_period";
+    Promise.all([
+      fetch(url).then(function (r) { if (!r.ok) throw new Error("Weer niet beschikbaar"); return r.json(); }),
+      fetch(marineUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+    ])
+      .then(function (res) { ui.weather = res[0]; ui.marine = res[1]; storageSet("ww-place", JSON.stringify(ui.place)); })
+      .catch(function (err) { ui.weatherError = err.message || "Weer niet beschikbaar"; })
+      .then(function () { ui.weatherLoading = false; if (ui.tab === "vaarinfo" || ui.tab === "home") render(); });
+  }
+  function locateMe() {
+    if (!navigator.geolocation) { ui.weatherError = "Je telefoon geeft geen locatie door."; render(); return; }
+    ui.weatherLoading = true; ui.weatherError = ""; render();
+    navigator.geolocation.getCurrentPosition(
+      function (pos) { loadWeather(pos.coords.latitude, pos.coords.longitude, "Jouw locatie"); },
+      function () { ui.weatherLoading = false; ui.weatherError = "Geen toegang tot je locatie. Sta locatie toe of zoek een plaats."; render(); },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }
+    );
+  }
+  function searchPlace(name) {
+    name = String(name || "").trim();
+    if (!name) return;
+    ui.weatherLoading = true; ui.weatherError = ""; render();
+    fetch("https://geocoding-api.open-meteo.com/v1/search?count=1&language=nl&name=" + encodeURIComponent(name))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var hit = d && d.results && d.results[0];
+        if (!hit) throw new Error("Plaats niet gevonden: " + name);
+        loadWeather(hit.latitude, hit.longitude, hit.name + (hit.admin1 ? ", " + hit.admin1 : ""));
+      })
+      .catch(function (err) { ui.weatherLoading = false; ui.weatherError = err.message; render(); });
+  }
+  function ensureWeather() {
+    if (ui.weather || ui.weatherLoading) return;
+    var saved = null;
+    try { saved = JSON.parse(storageGet("ww-place") || "null"); } catch (e) { saved = null; }
+    if (saved && typeof saved.lat === "number") { loadWeather(saved.lat, saved.lon, saved.label); return; }
+    var harbour = boatField("thuishaven") || boatField("ligplaats");
+    if (harbour) { searchPlace(harbour); return; }
+  }
+
+  function vaarinfoScreen() {
+    var head = '<header class="ww-head"><div class="ww-head-row" style="justify-content:flex-start">' +
+      '<a class="ww-icon-btn" href="#home" aria-label="Terug">' + ICON.back + '</a><div style="flex:1"><h1 style="font-size:22px">Actuele vaarinformatie</h1>' +
+      '<div class="ww-sub">' + esc(ui.place ? ui.place.label : "Kies je locatie") + "</div></div></div>" +
+      '<form class="ww-search" data-place-form><label class="sr-only" for="ww-place">Plaats of haven</label>' + ICON.pin +
+      '<input id="ww-place" type="search" enterkeyhint="search" placeholder="Plaats of haven" autocomplete="off">' +
+      '<button type="button" class="ww-link" data-locate style="white-space:nowrap">Mijn locatie</button></form></header>';
+    var body = "";
+    if (ui.weatherLoading) body = '<section class="ww-section"><p class="ww-small">Vaarinformatie laden…</p></section>';
+    else if (ui.weatherError) body = '<section class="ww-section"><div class="ww-notice">' + esc(ui.weatherError) + "</div></section>";
+    if (!ui.weather && !ui.weatherLoading) {
+      body += '<section class="ww-section"><div class="ww-empty">Zie direct wind, weer en golven waar je vaart.' +
+        '<button type="button" class="ww-btn ww-btn-primary" data-locate>Gebruik mijn locatie</button></div></section>';
+    }
+    if (ui.weather && ui.weather.current) {
+      var c = ui.weather.current;
+      var bft = beaufort(c.wind_speed_10m);
+      var warn = bft >= 6 ? '<div class="ww-notice"><strong>Let op: ' + bft + " Bft.</strong> Voor kleine boten en rubberboten is dit te veel wind.</div>" : "";
+      var marine = ui.marine && ui.marine.current && ui.marine.current.wave_height != null
+        ? '<div class="ww-spec"><span class="ww-small">Golfhoogte</span><span>' + ui.marine.current.wave_height.toFixed(1).replace(".", ",") + " m</span></div>" : "";
+      body += '<section class="ww-section">' + warn +
+        '<div class="ww-wind-card"><div class="ww-wind-main"><span class="ww-wind-arrow" style="transform:rotate(' + ((c.wind_direction_10m + 180) % 360) + 'deg)" aria-hidden="true">↑</span>' +
+        '<div><div class="ww-wind-bft">' + bft + ' Bft <span>' + windDir(c.wind_direction_10m) + "</span></div>" +
+        '<div class="ww-small" style="color:#C9D6E2">' + Math.round(c.wind_speed_10m) + " kn · stoten " + Math.round(c.wind_gusts_10m) + " kn</div></div></div>" +
+        '<div class="ww-wind-side"><div class="ww-wind-temp">' + Math.round(c.temperature_2m) + "°</div><div>" + esc(WMO[c.weather_code] || "") + "</div></div></div>" +
+        '<div class="ww-specs ww-specs-white">' +
+        '<div class="ww-spec"><span class="ww-small">Neerslag nu</span><span>' + (c.precipitation || 0).toString().replace(".", ",") + " mm</span></div>" + marine +
+        (ui.weather.daily ? '<div class="ww-spec"><span class="ww-small">Zon op / onder</span><span>' + esc(String(ui.weather.daily.sunrise[0]).slice(11)) + " – " + esc(String(ui.weather.daily.sunset[0]).slice(11)) + "</span></div>" : "") +
+        "</div></section>";
+
+      var h = ui.weather.hourly;
+      if (h && h.time) {
+        var now = Date.now(), rows = [];
+        for (var i = 0; i < h.time.length && rows.length < 12; i++) {
+          var t = new Date(h.time[i]).getTime();
+          if (t < now - 3600000) continue;
+          rows.push('<div class="ww-hour"><span>' + esc(h.time[i].slice(11, 16)) + '</span><strong>' + beaufort(h.wind_speed_10m[i]) + ' Bft</strong><span class="ww-small">' +
+            windDir(h.wind_direction_10m[i]) + "</span><span class=\"ww-small\">" + (h.precipitation_probability[i] == null ? "" : h.precipitation_probability[i] + "% regen") + "</span></div>");
+        }
+        body += '<section class="ww-section"><h2>Komende uren</h2><div class="ww-hours">' + rows.join("") + "</div></section>";
+      }
+      var d = ui.weather.daily;
+      if (d && d.time) {
+        body += '<section class="ww-section"><h2>Komende dagen</h2><div class="ww-list">' + d.time.map(function (day, i) {
+          var label = i === 0 ? "Vandaag" : new Date(day + "T12:00:00").toLocaleDateString("nl-NL", { weekday: "long" });
+          label = label.charAt(0).toUpperCase() + label.slice(1);
+          return '<div class="ww-list-row"><span>' + esc(label) + "</span><span>" + beaufort(d.wind_speed_10m_max[i]) + " Bft · " +
+            Math.round(d.temperature_2m_max[i]) + "° · " + esc(WMO[d.weather_code[i]] || "") + "</span></div>";
+        }).join("") + "</div></section>";
+      }
+    }
+    body += '<section class="ww-section"><h2>Vaarwegen</h2><div class="ww-list">' +
+      '<a class="ww-list-row ww-list-link" href="https://www.vaarweginformatie.nl/frp/main/#/geo/map" target="_blank" rel="noopener"><span>Bruggen &amp; sluizen</span><span>Bedieningstijden ›</span></a>' +
+      '<a class="ww-list-row ww-list-link" href="https://www.vaarweginformatie.nl/frp/main/#/nts" target="_blank" rel="noopener"><span>Berichten aan de scheepvaart</span><span>Stremmingen ›</span></a>' +
+      '<a class="ww-list-row ww-list-link" href="https://waterinfo.rws.nl/" target="_blank" rel="noopener"><span>Waterstanden</span><span>Rijkswaterstaat ›</span></a>' +
+      '<a class="ww-list-row ww-list-link" href="https://www.knmi.nl/nederland-nu/weer/waarschuwingen" target="_blank" rel="noopener"><span>Weerwaarschuwingen</span><span>KNMI ›</span></a>' +
+      '</div><p class="ww-small" style="margin:0">Weerdata: Open-Meteo.com (CC BY 4.0). Controleer altijd de officiële berichten voordat je vaart.</p></section>';
+    return head + body;
+  }
+
   function shopScreen() {
     var boat = currentBoat();
     var cart = '<a class="ww-icon-btn" href="/cart" aria-label="Winkelwagen">' + ICON.bag +
@@ -259,7 +435,7 @@
     var list = products.length
       ? products.map(productCard).join("")
       : '<div class="ww-empty">Nog geen suggesties. Zoek hierboven of vraag het Captain AI.</div>';
-    return head + usp + installHint() +
+    return head + usp +
       '<div data-results></div><div data-shop-rest>' +
       '<section class="ww-section">' + chip + "</section>" +
       '<section class="ww-section"><h2>Categorieën</h2>' + cats + "</section>" +
@@ -442,7 +618,7 @@
   }
 
   function nav() {
-    var items = [["shop", "Shoppen", ICON.bag], ["boot", "Je boot", ICON.boat], ["captain", "Captain AI", ICON.chat], ["service", "Serviceboek", ICON.book]];
+    var items = [["home", "Home", ICON.home], ["shop", "Shoppen", ICON.bag], ["captain", "Captain AI", ICON.chat], ["boot", "Je boot", ICON.boat], ["service", "Serviceboek", ICON.book]];
     return '<nav class="ww-nav" aria-label="Hoofdmenu"><div class="ww-nav-inner">' + items.map(function (it) {
       return '<a href="#' + it[0] + '"' + (ui.tab === it[0] ? ' aria-current="page"' : "") + ">" + it[2] + esc(it[1]) + "</a>";
     }).join("") + "</div></nav>";
@@ -450,7 +626,7 @@
 
   // ---------- render ----------
   function render() {
-    var screen = ui.tab === "boot" ? boatScreen() : ui.tab === "captain" ? captainScreen() : ui.tab === "service" ? serviceScreen() : shopScreen();
+    var screen = ui.tab === "home" ? homeScreen() : ui.tab === "vaarinfo" ? vaarinfoScreen() : ui.tab === "boot" ? boatScreen() : ui.tab === "captain" ? captainScreen() : ui.tab === "service" ? serviceScreen() : shopScreen();
     root.innerHTML = screen + nav() + (ui.sheet ? sheetHtml() : "");
     if (ui.tab === "shop") renderResults();
     if (ui.tab === "captain") {
@@ -460,11 +636,12 @@
   }
 
   function setTab(tab) {
-    var valid = { shop: 1, boot: 1, captain: 1, service: 1 };
-    ui.tab = valid[tab] ? tab : "shop";
+    var valid = { home: 1, vaarinfo: 1, shop: 1, boot: 1, captain: 1, service: 1 };
+    ui.tab = valid[tab] ? tab : "home";
     render();
     if (ui.tab !== "captain") window.scrollTo(0, 0);
     if (ui.tab === "captain" && !ui.captain && !ui.captainLoading) loadCaptain();
+    if (ui.tab === "vaarinfo" || ui.tab === "home") ensureWeather();
   }
 
   // ---------- Captain AI (bestaande endpoint /apps/bootmarkt/captain-ai) ----------
@@ -572,6 +749,7 @@
     if (t.hasAttribute("data-boat")) {
       window.location.href = S.appPath + "?boot=" + encodeURIComponent(t.getAttribute("data-boat")) + "#boot"; return;
     }
+    if (t.hasAttribute("data-locate")) { e.preventDefault(); locateMe(); return; }
     if (t.hasAttribute("data-ask")) { askCaptain(t.getAttribute("data-ask")); return; }
     if (t.hasAttribute("data-buy")) { buyCaptain(t.getAttribute("data-buy")); return; }
     if (t.hasAttribute("data-open-sheet")) { openSheet(); return; }
@@ -611,6 +789,21 @@
       if (input) input.blur();
       return;
     }
+    if (form.hasAttribute("data-home-ask")) {
+      e.preventDefault();
+      var hq = document.getElementById("ww-home-q");
+      var question = hq ? hq.value : "";
+      if (!String(question).trim()) { window.location.hash = "#captain"; return; }
+      window.location.hash = "#captain";
+      setTimeout(function () { askCaptain(question); }, 30);
+      return;
+    }
+    if (form.hasAttribute("data-place-form")) {
+      e.preventDefault();
+      var pq = document.getElementById("ww-place");
+      searchPlace(pq ? pq.value : "");
+      return;
+    }
     if (form.hasAttribute("data-captain-form")) {
       e.preventDefault();
       var ask = document.getElementById("ww-ask");
@@ -633,6 +826,6 @@
   window.addEventListener("hashchange", function () { setTab(window.location.hash.replace("#", "")); });
 
   // start
-  setTab(window.location.hash.replace("#", "") || "shop");
+  setTab(window.location.hash.replace("#", "") || "home");
   refreshCart();
 })();
