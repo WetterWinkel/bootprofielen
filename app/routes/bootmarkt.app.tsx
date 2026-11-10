@@ -20,7 +20,7 @@ import {
 } from "../lib/wetter-app.server";
 
 const APP_PATH = "/apps/bootmarkt/app";
-const ASSET_VERSION = "3";
+const ASSET_VERSION = "4";
 
 function assetBase() {
   return `${(process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "")}/wetter-app`;
@@ -147,6 +147,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const state = {
       appPath: APP_PATH,
       iconUrl: `${assetBase()}/icon-192.png`,
+      assetBase: assetBase(),
       firstName,
       boats: boats.map((item) => ({ id: item.id, name: boatName(item), data: item.data })),
       boatId: boat?.id || "",

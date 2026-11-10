@@ -211,3 +211,32 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ww-nav-inner { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .ww-nav a { font-size: 10.5px; }
 .ww-specs-white .ww-spec { background: #fff; }
+
+/* Vaarkaart */
+#ww-app.is-map { padding-bottom: 0; }
+.ww-map-screen { position: fixed; inset: 0 0 calc(var(--nav-h) + var(--safe-b)) 0; display: flex; flex-direction: column; background: var(--bg); }
+.ww-map-head { background: var(--navy); color: #fff; padding: calc(10px + var(--safe-t)) 12px 10px; display: flex; align-items: center; gap: 10px; z-index: 5; }
+.ww-airdraft { background: none; border: 0; color: #C9D6E2; font-size: 13px; padding: 2px 0; cursor: pointer; text-align: left; }
+.ww-airdraft strong { color: #fff; }
+.ww-map-speed { font-size: 12px; font-weight: 700; background: rgba(255,255,255,.14); padding: 6px 8px; border-radius: 8px; white-space: nowrap; }
+.ww-map-speed[hidden] { display: none; }
+.ww-map { flex: 1; min-height: 0; }
+.ww-map-tools { position: absolute; right: 12px; top: calc(78px + var(--safe-t)); z-index: 500; display: flex; flex-direction: column; gap: 8px; }
+.ww-map-btn { width: 44px; height: 44px; border-radius: 12px; border: 0; background: #fff; color: var(--navy); box-shadow: 0 2px 8px rgba(0,0,0,.2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.ww-map-btn.is-on { background: var(--teal); color: #fff; }
+.ww-map-legend { position: absolute; left: 10px; top: calc(78px + var(--safe-t)); z-index: 500; background: rgba(255,255,255,.95); border-radius: 10px; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; font-size: 11px; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+.ww-map-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 5px; margin-right: 6px; vertical-align: -1px; }
+.ww-map-hint { position: absolute; left: 50%; transform: translateX(-50%); bottom: 16px; z-index: 500; background: var(--navy); color: #fff; font-size: 13px; font-weight: 600; padding: 8px 12px; border-radius: 999px; }
+.ww-map-hint[hidden] { display: none; }
+.ww-sheet-map { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1100; background: #fff; border-radius: 18px 18px 0 0; box-shadow: 0 -6px 24px rgba(0,0,0,.18); padding: 14px 16px 16px; max-height: 62%; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.ww-sheet-map[hidden] { display: none; }
+.ww-sheet-map-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.ww-sheet-map-head div { display: flex; flex-direction: column; gap: 2px; }
+.ww-sheet-map-head strong { font-size: 17px; }
+.ww-verdict { display: flex; align-items: center; gap: 10px; border: 2px solid; border-radius: 12px; padding: 10px 12px; font-weight: 700; font-size: 15px; }
+.ww-verdict span { width: 14px; height: 14px; border-radius: 7px; flex-shrink: 0; }
+.ww-sheet-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ww-chip-static { display: inline-flex; align-items: center; height: 40px; padding: 0 12px; border-radius: 10px; background: var(--teal-soft); color: var(--navy); font-weight: 700; font-size: 13px; }
+.ww-sheet-map .ww-specs-white .ww-spec { background: var(--bg); }
+.ww-map-screen .leaflet-top.leaflet-right { top: 56px; }
+.ww-map-tools, .ww-map-legend, .ww-map-hint { z-index: 1000; }

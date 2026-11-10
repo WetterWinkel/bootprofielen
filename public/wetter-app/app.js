@@ -276,6 +276,7 @@
     var w = ui.weather && ui.weather.current;
     var tiles = [
       { href: "#vaarinfo", icon: "wind", title: "Actuele vaarinformatie", sub: w ? Math.round(w.wind_speed_10m) + " kn · " + beaufort(w.wind_speed_10m) + " Bft " + windDir(w.wind_direction_10m) : "Wind, weer, bruggen & sluizen", big: true },
+      { href: "#kaart", icon: "pin", title: "Vaarkaart", sub: "Bruggen, sluizen & jachthavens" },
       { href: "#boot", icon: "boat", title: boatsLabel, sub: boatSub },
       { href: "#shop", icon: "bag", title: "Shoppen", sub: "30.000+ artikelen" },
       { href: "/apps/bootmarkt", icon: "market", title: "Bootmarkt", sub: "Boten kopen & verkopen" },
@@ -406,6 +407,7 @@
         }).join("") + "</div></section>";
       }
     }
+    body += '<section class="ww-section"><a class="ww-btn ww-btn-primary" href="#kaart">Open de vaarkaart</a></section>';
     body += '<section class="ww-section"><h2>Vaarwegen</h2><div class="ww-list">' +
       '<a class="ww-list-row ww-list-link" href="https://www.vaarweginformatie.nl/frp/main/#/geo/map" target="_blank" rel="noopener"><span>Bruggen &amp; sluizen</span><span>Bedieningstijden ›</span></a>' +
       '<a class="ww-list-row ww-list-link" href="https://www.vaarweginformatie.nl/frp/main/#/nts" target="_blank" rel="noopener"><span>Berichten aan de scheepvaart</span><span>Stremmingen ›</span></a>' +
@@ -413,6 +415,239 @@
       '<a class="ww-list-row ww-list-link" href="https://www.knmi.nl/nederland-nu/weer/waarschuwingen" target="_blank" rel="noopener"><span>Weerwaarschuwingen</span><span>KNMI ›</span></a>' +
       '</div><p class="ww-small" style="margin:0">Weerdata: Open-Meteo.com (CC BY 4.0). Controleer altijd de officiële berichten voordat je vaart.</p></section>';
     return head + body;
+  }
+
+
+  // ---------- Vaarkaart (Leaflet + Rijkswaterstaat FIS) ----------
+  var FIS_WFS = "https://geo.rijkswaterstaat.nl/services/ogc/gdr/fis_vnds/ows?service=WFS&version=2.0.0&request=GetFeature&outputFormat=application/json&count=800";
+  var map = null, mapLayers = null, mapObjects = {}, mapOpenings = {}, mapLoadTimer = null, watchId = null, meMarker = null, meAccuracy = null;
+  var leafletLoading = null;
+
+  function airDraft() {
+    var saved = storageGet("ww-airdraft");
+    var raw = saved || boatField("doorvaarthoogte");
+    var n = parseFloat(String(raw || "").replace(",", ".").replace(/[^0-9.]/g, ""));
+    return isFinite(n) && n > 0 && n < 40 ? n : null;
+  }
+  function fmtM(n) { return n == null ? "?" : (Math.round(n * 100) / 100).toString().replace(".", ",") + " m"; }
+
+  function loadLeaflet() {
+    if (window.L) return Promise.resolve();
+    if (leafletLoading) return leafletLoading;
+    leafletLoading = new Promise(function (resolve, reject) {
+      var css = document.createElement("link");
+      css.rel = "stylesheet"; css.href = S.assetBase + "/vendor/leaflet/leaflet.css";
+      document.head.appendChild(css);
+      var js = document.createElement("script");
+      js.src = S.assetBase + "/vendor/leaflet/leaflet.js";
+      js.onload = function () { resolve(); };
+      js.onerror = function () { leafletLoading = null; reject(new Error("Kaart kon niet laden")); };
+      document.head.appendChild(js);
+    });
+    return leafletLoading;
+  }
+
+  function kaartScreen() {
+    var ad = airDraft();
+    return '<div class="ww-map-screen">' +
+      '<header class="ww-map-head"><a class="ww-icon-btn" href="#home" aria-label="Terug">' + ICON.back + "</a>" +
+      '<div style="flex:1;min-width:0"><h1 style="font-size:19px;color:#fff">Vaarkaart</h1>' +
+      '<button type="button" class="ww-airdraft" data-airdraft>' + (ad ? "Doorvaarthoogte boot: <strong>" + fmtM(ad) + "</strong> · wijzig" : "Stel je doorvaarthoogte in") + "</button></div>" +
+      '<span class="ww-map-speed" data-speed hidden></span></header>' +
+      '<div id="ww-map" class="ww-map" role="application" aria-label="Vaarkaart"></div>' +
+      '<div class="ww-map-tools"><button type="button" class="ww-map-btn" data-follow aria-label="Volg mijn locatie">' + ICON.pin + "</button></div>" +
+      '<div class="ww-map-legend"><span><i style="background:#16A34A"></i>Past eronder</span><span><i style="background:#EA8A00"></i>Moet open</span><span><i style="background:#DC2626"></i>Past niet</span><span><i style="background:#7C3AED"></i>Sluis</span></div>' +
+      '<div class="ww-map-hint" data-map-hint>Zoom in om bruggen en sluizen te zien</div>' +
+      '<div class="ww-sheet-map" data-map-sheet hidden></div></div>';
+  }
+
+  function initMap() {
+    var el = document.getElementById("ww-map");
+    if (!el) return;
+    loadLeaflet().then(function () {
+      if (!document.getElementById("ww-map")) return;
+      if (map) { map.remove(); map = null; }
+      var saved = null;
+      try { saved = JSON.parse(storageGet("ww-map-view") || "null"); } catch (e) { saved = null; }
+      var center = saved ? [saved.lat, saved.lon] : (ui.place ? [ui.place.lat, ui.place.lon] : [53.03, 5.75]);
+      map = L.map("ww-map", { zoomControl: false, attributionControl: true }).setView(center, saved ? saved.z : 12);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+      L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "© OpenSeaMap" }).addTo(map);
+      L.control.zoom({ position: "topright" }).addTo(map);
+      map.attributionControl.addAttribution("Vaarwegdata: Rijkswaterstaat");
+      mapLayers = L.layerGroup().addTo(map);
+      mapObjects = {}; mapOpenings = {};
+      map.on("moveend", function () {
+        var c = map.getCenter();
+        storageSet("ww-map-view", JSON.stringify({ lat: c.lat, lon: c.lng, z: map.getZoom() }));
+        clearTimeout(mapLoadTimer);
+        mapLoadTimer = setTimeout(loadMapData, 250);
+      });
+      loadMapData();
+      startWatch(!saved);
+    }).catch(function (err) { toast(err.message); });
+  }
+
+  function wfs(type, b) {
+    var bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(function (n) { return n.toFixed(5); }).join(",") + ",urn:ogc:def:crs:OGC:1.3:CRS84";
+    return fetch(FIS_WFS + "&typeName=" + type + "&bbox=" + bbox).then(function (r) { return r.json(); }).then(function (d) { return d.features || []; });
+  }
+
+  function loadMapData() {
+    if (!map) return;
+    var hint = document.querySelector("[data-map-hint]");
+    var z = map.getZoom();
+    if (z < 11) { if (hint) { hint.hidden = false; hint.textContent = "Zoom in om bruggen en sluizen te zien"; } return; }
+    if (hint) { hint.hidden = false; hint.textContent = "Laden…"; }
+    var b = map.getBounds().pad(0.15);
+    var types = ["brug", "opening", "sluis"];
+    if (z >= 12) types.push("jachthaven_p");
+    Promise.all(types.map(function (t) { return wfs(t, b).catch(function () { return []; }); }))
+      .then(function (res) {
+        var openings = res[1] || [];
+        openings.forEach(function (f) {
+          var p = f.properties || {};
+          if (p.parentgeotype !== "bridge" || !p.parentid) return;
+          var list = mapOpenings[p.parentid] || (mapOpenings[p.parentid] = []);
+          if (!list.some(function (o) { return o.id === p.id; })) list.push({ id: p.id, type: p.type, clearance: p.clearanceheightclosed, width: p.width, name: p.name });
+        });
+        (res[0] || []).forEach(function (f) { addObject("bridge", f); });
+        (res[2] || []).forEach(function (f) { addObject("lock", f); });
+        (res[3] || []).forEach(function (f) { addObject("harbour", f); });
+        if (hint) hint.hidden = true;
+      })
+      .catch(function () { if (hint) { hint.hidden = false; hint.textContent = "Vaarwegdata niet bereikbaar"; } });
+  }
+
+  function bridgeVerdict(p, openings) {
+    var ad = airDraft();
+    var fixedOpenings = openings.filter(function (o) { return o.type === "VST"; });
+    var clearances = openings.map(function (o) { return o.clearance; }).filter(function (n) { return typeof n === "number"; });
+    var maxClear = clearances.length ? Math.max.apply(null, clearances) : null;
+    var canOpen = p.canopen === "Yes" || openings.some(function (o) { return o.type && o.type !== "VST"; });
+    var verdict = { color: "#64748B", label: canOpen ? "Beweegbare brug" : "Vaste brug", clearance: maxClear, canOpen: canOpen };
+    if (ad == null || maxClear == null) {
+      verdict.color = canOpen ? "#0877BD" : "#64748B";
+      return verdict;
+    }
+    if (maxClear >= ad + 0.1) { verdict.color = "#16A34A"; verdict.label = "Jouw boot past eronder"; }
+    else if (canOpen) { verdict.color = "#EA8A00"; verdict.label = "Brug moet open"; }
+    else { verdict.color = "#DC2626"; verdict.label = "Past niet: vaste brug te laag"; }
+    if (fixedOpenings.length && canOpen && maxClear < ad + 0.1) verdict.label = "Brug moet open";
+    return verdict;
+  }
+
+  function addObject(kind, f) {
+    var p = f.properties || {};
+    var key = kind + ":" + p.id;
+    var g = f.geometry || {};
+    var ll = null;
+    if (g.type === "Point") ll = [g.coordinates[1], g.coordinates[0]];
+    else if (g.type === "Polygon" && g.coordinates && g.coordinates[0]) {
+      var ring = g.coordinates[0], la = 0, lo = 0;
+      ring.forEach(function (c) { lo += c[0]; la += c[1]; });
+      ll = [la / ring.length, lo / ring.length];
+    } else if (g.type === "MultiPolygon" && g.coordinates && g.coordinates[0] && g.coordinates[0][0]) {
+      var r2 = g.coordinates[0][0], la2 = 0, lo2 = 0;
+      r2.forEach(function (c) { lo2 += c[0]; la2 += c[1]; });
+      ll = [la2 / r2.length, lo2 / r2.length];
+    }
+    if (!ll) return;
+    var existing = mapObjects[key];
+    var color, radius = 8;
+    if (kind === "bridge") color = bridgeVerdict(p, mapOpenings[p.id] || []).color;
+    else if (kind === "lock") color = "#7C3AED";
+    else { color = "#07345C"; radius = 6; }
+    if (existing) { existing.marker.setStyle({ fillColor: color }); existing.props = p; return; }
+    var marker = L.circleMarker(ll, { radius: radius, color: "#fff", weight: 2, fillColor: color, fillOpacity: 1 }).addTo(mapLayers);
+    marker.on("click", function () { openMapSheet(kind, p.id); });
+    mapObjects[key] = { marker: marker, props: p, kind: kind };
+  }
+
+  function refreshBridgeColors() {
+    Object.keys(mapObjects).forEach(function (k) {
+      var o = mapObjects[k];
+      if (o.kind === "bridge") o.marker.setStyle({ fillColor: bridgeVerdict(o.props, mapOpenings[o.props.id] || []).color });
+    });
+  }
+
+  function openMapSheet(kind, id) {
+    var o = mapObjects[kind + ":" + id];
+    var sheet = document.querySelector("[data-map-sheet]");
+    if (!o || !sheet) return;
+    var p = o.props;
+    var html = '<div class="ww-sheet-map-head"><div><strong>' + esc(p.name || "Onbekend") + "</strong>" +
+      '<span class="ww-small">' + esc([p.city, kind === "bridge" ? "Brug" : kind === "lock" ? "Sluis" : "Jachthaven"].filter(Boolean).join(" · ")) + "</span></div>" +
+      '<button type="button" class="ww-link" data-close-map-sheet aria-label="Sluiten" style="font-size:22px;min-width:44px;min-height:44px">×</button></div>';
+    if (kind === "bridge") {
+      var v = bridgeVerdict(p, mapOpenings[p.id] || []);
+      html += '<div class="ww-verdict" style="border-color:' + v.color + '"><span style="background:' + v.color + '"></span>' + esc(v.label) + "</div>" +
+        '<div class="ww-specs ww-specs-white"><div class="ww-spec"><span class="ww-small">Doorvaarthoogte (dicht)</span><span>' + fmtM(v.clearance) + "</span></div>" +
+        '<div class="ww-spec"><span class="ww-small">Jouw boot</span><span>' + (airDraft() ? fmtM(airDraft()) : '<button type="button" class="ww-link" data-airdraft>Instellen</button>') + "</span></div></div>";
+    }
+    if (kind === "harbour") {
+      html += '<p class="ww-small" style="margin:0">' + esc([p.longstayplaces ? p.longstayplaces + " vaste ligplaatsen" : "", p.shortstayplaces ? p.shortstayplaces + " passantenplaatsen" : "", p.suppliesfuel === "Yes" ? "brandstof" : ""].filter(Boolean).join(" · ")) + "</p>";
+    } else {
+      html += '<div data-times><p class="ww-small" style="margin:0">Bedieningstijden laden…</p></div>';
+    }
+    sheet.innerHTML = html;
+    sheet.hidden = false;
+    if (kind === "harbour") return;
+    fetch(S.appPath + "/vaardata?type=" + kind + "&id=" + encodeURIComponent(id), { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var box = sheet.querySelector("[data-times]");
+        if (!box) return;
+        if (!d || !d.success) { box.innerHTML = '<p class="ww-small" style="margin:0">' + esc((d && d.message) || "Geen bedieningstijden gevonden.") + "</p>"; return; }
+        var ob = d.object || {}, t = d.times;
+        var out = "";
+        if (t && t.days) {
+          out += '<div class="ww-list">' + t.days.slice(0, 3).map(function (day) {
+            return '<div class="ww-list-row"><span>' + esc(day.label) + "</span><span>" + (day.windows.length ? esc(day.windows.join(", ")) : (day.known ? "Geen bediening" : "Onbekend")) + "</span></div>";
+          }).join("") + "</div>";
+          if (t.note) out += '<p class="ww-small" style="margin:0">' + esc(t.note) + "</p>";
+        } else if (kind === "bridge" && ob.canOpen === false) {
+          out += '<p class="ww-small" style="margin:0">Vaste brug, wordt niet bediend.</p>';
+        } else {
+          out += '<p class="ww-small" style="margin:0">Geen bedieningstijden bekend.</p>';
+        }
+        var actions = [];
+        if (ob.vhf && ob.vhf.length) actions.push('<span class="ww-chip-static">Marifoon kanaal ' + esc(ob.vhf.join(" / ")) + "</span>");
+        if (ob.phone) actions.push('<a class="ww-btn ww-btn-primary ww-btn-sm" href="tel:' + esc(String(ob.phone).replace(/[^0-9+]/g, "")) + '">Bel ' + esc(ob.phone) + "</a>");
+        if (actions.length) out += '<div class="ww-sheet-actions">' + actions.join("") + "</div>";
+        if (kind === "bridge" && ob.canOpen) {
+          out += '<p class="ww-small" style="margin:0">Brugopening aanvragen: via marifoon, telefoon of de aanmeldknop bij de brug.</p>';
+        }
+        out += '<p class="ww-small" style="margin:0;opacity:.8">Bron: Rijkswaterstaat. Controleer ter plaatse.</p>';
+        box.innerHTML = out;
+      })
+      .catch(function () { var box = sheet.querySelector("[data-times]"); if (box) box.innerHTML = '<p class="ww-small" style="margin:0">Bedieningstijden niet bereikbaar.</p>'; });
+  }
+
+  var following = false;
+  function startWatch(centerFirst) {
+    if (!navigator.geolocation || watchId != null) return;
+    var first = true;
+    watchId = navigator.geolocation.watchPosition(function (pos) {
+      if (!map) return;
+      var ll = [pos.coords.latitude, pos.coords.longitude];
+      if (!meMarker) {
+        meAccuracy = L.circle(ll, { radius: pos.coords.accuracy || 30, color: "#0877BD", weight: 1, fillOpacity: 0.12 }).addTo(map);
+        meMarker = L.circleMarker(ll, { radius: 8, color: "#fff", weight: 3, fillColor: "#0877BD", fillOpacity: 1 }).addTo(map);
+      } else { meMarker.setLatLng(ll); meAccuracy.setLatLng(ll).setRadius(pos.coords.accuracy || 30); }
+      if ((first && centerFirst) || following) map.setView(ll, Math.max(map.getZoom(), 14));
+      first = false;
+      var sp = document.querySelector("[data-speed]");
+      if (sp && pos.coords.speed != null && pos.coords.speed >= 0) {
+        sp.hidden = false;
+        sp.textContent = (pos.coords.speed * 1.943844).toFixed(1).replace(".", ",") + " kn · " + (pos.coords.speed * 3.6).toFixed(1).replace(".", ",") + " km/u";
+      }
+    }, function () { /* geen locatie: kaart werkt gewoon */ }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+  }
+  function stopWatch() {
+    if (watchId != null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
+    watchId = null; meMarker = null; meAccuracy = null; following = false;
+    if (map) { map.remove(); map = null; }
   }
 
   function shopScreen() {
@@ -626,7 +861,8 @@
 
   // ---------- render ----------
   function render() {
-    var screen = ui.tab === "home" ? homeScreen() : ui.tab === "vaarinfo" ? vaarinfoScreen() : ui.tab === "boot" ? boatScreen() : ui.tab === "captain" ? captainScreen() : ui.tab === "service" ? serviceScreen() : shopScreen();
+    var screen = ui.tab === "kaart" ? kaartScreen() : ui.tab === "home" ? homeScreen() : ui.tab === "vaarinfo" ? vaarinfoScreen() : ui.tab === "boot" ? boatScreen() : ui.tab === "captain" ? captainScreen() : ui.tab === "service" ? serviceScreen() : shopScreen();
+    root.className = ui.tab === "kaart" ? "is-map" : "";
     root.innerHTML = screen + nav() + (ui.sheet ? sheetHtml() : "");
     if (ui.tab === "shop") renderResults();
     if (ui.tab === "captain") {
@@ -636,12 +872,14 @@
   }
 
   function setTab(tab) {
-    var valid = { home: 1, vaarinfo: 1, shop: 1, boot: 1, captain: 1, service: 1 };
+    if (ui.tab === "kaart" && tab !== "kaart") stopWatch();
+    var valid = { kaart: 1, home: 1, vaarinfo: 1, shop: 1, boot: 1, captain: 1, service: 1 };
     ui.tab = valid[tab] ? tab : "home";
     render();
     if (ui.tab !== "captain") window.scrollTo(0, 0);
     if (ui.tab === "captain" && !ui.captain && !ui.captainLoading) loadCaptain();
     if (ui.tab === "vaarinfo" || ui.tab === "home") ensureWeather();
+    if (ui.tab === "kaart") initMap();
   }
 
   // ---------- Captain AI (bestaande endpoint /apps/bootmarkt/captain-ai) ----------
@@ -748,6 +986,27 @@
     }
     if (t.hasAttribute("data-boat")) {
       window.location.href = S.appPath + "?boot=" + encodeURIComponent(t.getAttribute("data-boat")) + "#boot"; return;
+    }
+    if (t.hasAttribute("data-close-map-sheet")) { var ms = document.querySelector("[data-map-sheet]"); if (ms) ms.hidden = true; return; }
+    if (t.hasAttribute("data-follow")) {
+      following = !following; t.classList.toggle("is-on", following);
+      if (following && meMarker && map) map.setView(meMarker.getLatLng(), Math.max(map.getZoom(), 14));
+      if (!meMarker) { toast("Locatie zoeken… sta locatie toe"); startWatch(true); }
+      return;
+    }
+    if (t.hasAttribute("data-airdraft")) {
+      var cur = airDraft();
+      var val = window.prompt("Doorvaarthoogte van je boot in meters (hoogste punt boven water, bijv. 2,4):", cur ? String(cur).replace(".", ",") : "");
+      if (val != null) {
+        var n = parseFloat(String(val).replace(",", "."));
+        if (isFinite(n) && n > 0 && n < 40) { storageSet("ww-airdraft", String(n)); toast("Doorvaarthoogte: " + fmtM(n)); }
+        else if (String(val).trim() === "") { try { window.localStorage.removeItem("ww-airdraft"); } catch (er) { /* niets */ } }
+        var head = document.querySelector("[data-airdraft]");
+        if (head && ui.tab === "kaart") { var ad2 = airDraft(); head.innerHTML = ad2 ? "Doorvaarthoogte boot: <strong>" + fmtM(ad2) + "</strong> · wijzig" : "Stel je doorvaarthoogte in"; }
+        refreshBridgeColors();
+        var ms2 = document.querySelector("[data-map-sheet]"); if (ms2) ms2.hidden = true;
+      }
+      return;
     }
     if (t.hasAttribute("data-locate")) { e.preventDefault(); locateMe(); return; }
     if (t.hasAttribute("data-ask")) { askCaptain(t.getAttribute("data-ask")); return; }
