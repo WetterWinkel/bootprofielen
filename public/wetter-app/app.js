@@ -500,7 +500,7 @@
     if (z < 11) { if (hint) { hint.hidden = false; hint.textContent = "Zoom in om bruggen en sluizen te zien"; } return; }
     if (hint) { hint.hidden = false; hint.textContent = "Laden…"; }
     var b = map.getBounds().pad(0.15);
-    var types = ["brug", "opening", "sluis"];
+    var types = ["brug", "opening", "sluis_v"];
     if (z >= 12) types.push("jachthaven_p");
     Promise.all(types.map(function (t) { return wfs(t, b).catch(function () { return []; }); }))
       .then(function (res) {

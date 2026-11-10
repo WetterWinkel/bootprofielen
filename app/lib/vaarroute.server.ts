@@ -150,7 +150,7 @@ export async function buildNetwork(log: (msg: string) => void = () => {}): Promi
     loadNwb(),
     getJson(`${FIS_WFS}&typeName=brug&count=20000`).then((d) => d.features || []),
     getJson(`${FIS_WFS}&typeName=opening&count=20000`).then((d) => d.features || []),
-    getJson(`${FIS_WFS}&typeName=sluis&count=5000`).then((d) => d.features || []),
+    getJson(`${FIS_WFS}&typeName=sluis_v&count=5000`).then((d) => d.features || []),
   ]);
   log(`data geladen: ${nwb.length} vaarwegvakken, ${bruggen.length} bruggen, ${openingen.length} openingen, ${sluizen.length} sluizen in ${Date.now() - started} ms`);
 
@@ -297,7 +297,7 @@ function slice(e: Edge, from: number, to: number): Coord[] {
 }
 
 export type RouteResult =
-  | { ok: false; reason: string }
+  | { ok: false; reason: string; blockers?: Array<{ name: string; clearance: number | null; lat: number; lon: number }> }
   | {
       ok: true;
       distanceM: number;
@@ -372,13 +372,22 @@ export function planRoute(net: Network, from: Coord, to: Coord, airDraft: number
       }
     }
     if (!prev.has(END)) {
-      return {
-        ok: false,
-        reason:
-          airDraft != null
-            ? "Geen route gevonden die past bij de doorvaarthoogte van je boot. Een vaste brug onderweg is te laag."
-            : "Geen route gevonden over het vaarwegennet.",
-      };
+      if (airDraft != null) {
+        // Zonder hoogtebeperking rekenen om te laten zien welke brug het probleem is.
+        const free = planRoute(net, from, to, null);
+        if (free.ok) {
+          const blockers = free.objects.filter(
+            (o) => o.kind === "bridge" && !o.canOpen && o.clearance != null && o.clearance < airDraft + margin,
+          );
+          const names = blockers.slice(0, 3).map((o) => `${o.name || "brug"} (${String(o.clearance).replace(".", ",")} m)`);
+          return {
+            ok: false,
+            reason: `Je bestemming is niet bereikbaar met een doorvaarthoogte van ${String(airDraft).replace(".", ",")} m. Te lage vaste brug: ${names.join(", ") || "onbekend"}. Kies een bestemming ervoor, bijvoorbeeld een haven aan de rand.`,
+            blockers: blockers.map((o) => ({ name: o.name, clearance: o.clearance, lat: o.lat, lon: o.lon })),
+          } as any;
+        }
+      }
+      return { ok: false, reason: "Geen route gevonden over het vaarwegennet." };
     }
     // Pad terug opbouwen.
     const nodes: Array<{ node: string; edge: number }> = [];
