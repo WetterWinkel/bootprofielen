@@ -310,18 +310,12 @@
     ui.weatherLoading = true; ui.weatherError = "";
     ui.place = { lat: lat, lon: lon, label: label };
     if (ui.tab === "vaarinfo") render();
-    var base = "latitude=" + lat.toFixed(3) + "&longitude=" + lon.toFixed(3) + "&timezone=Europe%2FAmsterdam";
-    var url = "https://api.open-meteo.com/v1/forecast?" + base +
-      "&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation" +
-      "&hourly=wind_speed_10m,wind_gusts_10m,wind_direction_10m,precipitation_probability,temperature_2m" +
-      "&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_gusts_10m_max,sunrise,sunset" +
-      "&wind_speed_unit=kn&forecast_days=3";
-    var marineUrl = "https://marine-api.open-meteo.com/v1/marine?" + base + "&current=wave_height,wave_direction,wave_period";
-    Promise.all([
-      fetch(url).then(function (r) { if (!r.ok) throw new Error("Weer niet beschikbaar"); return r.json(); }),
-      fetch(marineUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
-    ])
-      .then(function (res) { ui.weather = res[0]; ui.marine = res[1]; storageSet("ww-place", JSON.stringify(ui.place)); })
+    fetch(S.appPath + "/weer?lat=" + Number(lat).toFixed(4) + "&lon=" + Number(lon).toFixed(4), { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (r) { return r.json().catch(function () { return { success: false, message: "Weer niet beschikbaar (" + r.status + ")" }; }); })
+      .then(function (d) {
+        if (!d || !d.success || !d.weather) throw new Error((d && d.message) || "Weer niet beschikbaar");
+        ui.weather = d.weather; ui.marine = d.marine; storageSet("ww-place", JSON.stringify(ui.place));
+      })
       .catch(function (err) { ui.weatherError = err.message || "Weer niet beschikbaar"; })
       .then(function () { ui.weatherLoading = false; if (ui.tab === "vaarinfo" || ui.tab === "home") render(); });
   }
@@ -338,12 +332,13 @@
     name = String(name || "").trim();
     if (!name) return;
     ui.weatherLoading = true; ui.weatherError = ""; render();
-    fetch("https://geocoding-api.open-meteo.com/v1/search?count=1&language=nl&name=" + encodeURIComponent(name))
+    fetch("https://api.pdok.nl/bzk/locatieserver/search/v3_1/free?rows=1&fq=type:(woonplaats%20OR%20gemeente%20OR%20weg)&q=" + encodeURIComponent(name))
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        var hit = d && d.results && d.results[0];
-        if (!hit) throw new Error("Plaats niet gevonden: " + name);
-        loadWeather(hit.latitude, hit.longitude, hit.name + (hit.admin1 ? ", " + hit.admin1 : ""));
+        var doc = d && d.response && d.response.docs && d.response.docs[0];
+        var m = doc && /POINT\(([-0-9.]+) ([-0-9.]+)\)/.exec(doc.centroide_ll || "");
+        if (!m) throw new Error("Plaats niet gevonden: " + name);
+        loadWeather(parseFloat(m[2]), parseFloat(m[1]), doc.weergavenaam);
       })
       .catch(function (err) { ui.weatherLoading = false; ui.weatherError = err.message; render(); });
   }
