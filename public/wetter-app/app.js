@@ -457,7 +457,7 @@
       '<div class="ww-map-tools-left"><button type="button" class="ww-map-btn" data-layers aria-label="Kaartlagen">' + ICON.box + "</button></div>" +
       '<div class="ww-nav-bar" data-nav-bar hidden></div>' +
       '<div id="ww-map" class="ww-map" role="application" aria-label="Vaarkaart"></div>' +
-      '<div class="ww-map-tools"><button type="button" class="ww-map-btn" data-follow aria-label="Volg mijn locatie">' + ICON.pin + "</button></div>" +
+      '<div class="ww-map-tools"><button type="button" class="ww-map-btn ww-follow-btn' + (following ? " is-on" : "") + '" data-follow aria-pressed="' + following + '">' + ICON.pin + '<span data-follow-label>' + (following ? "Volgen" : "Vrij") + "</span></button></div>" +
       '<div class="ww-map-legend"><span><i style="background:#16A34A"></i>Past eronder</span><span><i style="background:#EA8A00"></i>Moet open</span><span><i style="background:#DC2626"></i>Past niet</span><span><i style="background:#7C3AED"></i>Sluis</span></div>' +
       '<div class="ww-map-hint" data-map-hint>Zoom in om bruggen en sluizen te zien</div>' +
       '<div class="ww-sheet-map" data-map-sheet hidden></div></div>';
@@ -485,6 +485,7 @@
         clearTimeout(mapLoadTimer);
         mapLoadTimer = setTimeout(loadMapData, 250);
       });
+      map.on("dragstart", function () { if (following) setFollow(false); });
       map.on("contextmenu", function (ev) {
         route.to = { label: "Gekozen punt", lat: ev.latlng.lat, lon: ev.latlng.lng };
         L.popup().setLatLng(ev.latlng).setContent('<button type="button" class="ww-btn ww-btn-primary ww-btn-sm" data-route-here>Vaar hierheen</button>').openOn(map);
@@ -810,6 +811,15 @@
   }
 
   var following = false;
+  function setFollow(on) {
+    following = on;
+    var b = document.querySelector("[data-follow]");
+    if (b) {
+      b.classList.toggle("is-on", on);
+      b.setAttribute("aria-pressed", String(on));
+      var lbl = b.querySelector("[data-follow-label]"); if (lbl) lbl.textContent = on ? "Volgen" : "Vrij";
+    }
+  }
   function startWatch(centerFirst) {
     if (!navigator.geolocation || watchId != null) return;
     var first = true;
@@ -820,7 +830,8 @@
         meAccuracy = L.circle(ll, { radius: pos.coords.accuracy || 30, color: "#0877BD", weight: 1, fillOpacity: 0.12 }).addTo(map);
         meMarker = L.circleMarker(ll, { radius: 8, color: "#fff", weight: 3, fillColor: "#0877BD", fillOpacity: 1 }).addTo(map);
       } else { meMarker.setLatLng(ll); meAccuracy.setLatLng(ll).setRadius(pos.coords.accuracy || 30); }
-      if ((first && centerFirst) || following) map.setView(ll, Math.max(map.getZoom(), 14));
+      if (first && centerFirst) map.setView(ll, Math.max(map.getZoom(), 14));
+      else if (following) map.panTo(ll, { animate: true, duration: 0.5 });
       updateNavBar();
       first = false;
       var sp = document.querySelector("[data-speed]");
@@ -1439,11 +1450,11 @@
       return;
     }
     if (t.hasAttribute("data-nav-start")) {
-      route.nav = true; following = true; spoken = {};
+      route.nav = true; spoken = {};
       say("Navigatie gestart naar " + route.to.label + ".");
-      var fb = document.querySelector("[data-follow]"); if (fb) fb.classList.add("is-on");
+      setFollow(true);
       var ns = document.querySelector("[data-map-sheet]"); if (ns) ns.hidden = true;
-      if (!meMarker) startWatch(true); else map.setView(meMarker.getLatLng(), 15);
+      if (!meMarker) startWatch(true); else map.setView(meMarker.getLatLng(), Math.max(map.getZoom(), 14));
       updateNavBar();
       return;
     }
@@ -1459,8 +1470,9 @@
     }
     if (t.hasAttribute("data-close-map-sheet")) { var ms = document.querySelector("[data-map-sheet]"); if (ms) ms.hidden = true; return; }
     if (t.hasAttribute("data-follow")) {
-      following = !following; t.classList.toggle("is-on", following);
-      if (following && meMarker && map) map.setView(meMarker.getLatLng(), Math.max(map.getZoom(), 14));
+      setFollow(!following);
+      if (following && meMarker && map) map.panTo(meMarker.getLatLng());
+      toast(following ? "Kaart volgt je locatie" : "Vrij scrollen");
       if (!meMarker) { toast("Locatie zoeken… sta locatie toe"); startWatch(true); }
       return;
     }

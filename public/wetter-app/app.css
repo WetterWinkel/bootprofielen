@@ -260,3 +260,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ww-toggle { display: flex; align-items: center; gap: 12px; min-height: 44px; font-size: 15px; border-bottom: 1px solid #E9EEF2; }
 .ww-toggle input { width: 22px; height: 22px; accent-color: var(--teal); }
 .ww-voice { float: right; background: rgba(255,255,255,.15); border: 0; color: #fff; border-radius: 8px; width: 40px; height: 36px; margin: -2px -4px 0 8px; font-size: 18px; cursor: pointer; }
+
+.ww-follow-btn { width: auto; padding: 0 12px; gap: 6px; font-weight: 700; font-size: 13px; }
+.ww-map-tools-left { top: calc(128px + var(--safe-t)); }
+.ww-nav-bar { right: 10px; }
+.ww-map-screen:has(.ww-nav-bar:not([hidden])) .ww-map-tools { top: calc(150px + var(--safe-t)); }
+.ww-map-screen:has(.ww-nav-bar:not([hidden])) .ww-map-tools-left { top: calc(200px + var(--safe-t)); }
+.ww-map-screen:has(.ww-nav-bar:not([hidden])) .leaflet-top.leaflet-right { top: 180px; }
