@@ -421,7 +421,7 @@
   // ---------- Vaarkaart (Leaflet + Rijkswaterstaat FIS) ----------
   var FIS_WFS = "https://geo.rijkswaterstaat.nl/services/ogc/gdr/fis_vnds/ows?service=WFS&version=2.0.0&request=GetFeature&outputFormat=application/json&count=800";
   var map = null, mapLayers = null, mapObjects = {}, mapOpenings = {}, mapLoadTimer = null, watchId = null, meMarker = null, meAccuracy = null;
-  var leafletLoading = null;
+  var leafletLoading = null, lineRenderer = null;
 
   function airDraft() {
     var saved = storageGet("ww-airdraft");
@@ -472,7 +472,10 @@
       var saved = null;
       try { saved = JSON.parse(storageGet("ww-map-view") || "null"); } catch (e) { saved = null; }
       var center = saved ? [saved.lat, saved.lon] : (ui.place ? [ui.place.lat, ui.place.lon] : [53.03, 5.75]);
-      map = L.map("ww-map", { zoomControl: false, attributionControl: true }).setView(center, saved ? saved.z : 12);
+      // Canvas met extra tikmarge (vinger op telefoon), lijnen in een laag onder de punten.
+      map = L.map("ww-map", { zoomControl: false, attributionControl: true, preferCanvas: true, renderer: L.canvas({ tolerance: 14 }) }).setView(center, saved ? saved.z : 12);
+      map.createPane("ww-lines").style.zIndex = 390;
+      lineRenderer = L.canvas({ pane: "ww-lines", tolerance: 6 });
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
       L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "© OpenSeaMap" }).addTo(map);
       L.control.zoom({ position: "topright" }).addTo(map);
@@ -565,7 +568,7 @@
     var lines = g.type === "LineString" ? [g.coordinates] : g.type === "MultiLineString" ? g.coordinates : [];
     if (!lines.length) return;
     var latlngs = lines.map(function (line) { return line.map(function (c) { return [c[1], c[0]]; }); });
-    var poly = L.polyline(latlngs, { color: color, weight: 5, opacity: 0.6, dashArray: dash || null }).addTo(mapLayers);
+    var poly = L.polyline(latlngs, { color: color, weight: 5, opacity: 0.6, dashArray: dash || null, renderer: lineRenderer || undefined, pane: "ww-lines" }).addTo(mapLayers);
     poly.on("click", function () { openInfoSheet(kind, p.id); });
     mapObjects[key] = { marker: poly, props: p, kind: kind };
   }
@@ -738,7 +741,7 @@
     var color, radius = 8;
     if (kind === "bridge") color = bridgeVerdict(p, mapOpenings[p.id] || []).color;
     else if (kind === "lock") color = "#7C3AED";
-    else { color = "#07345C"; radius = 6; }
+    else { color = "#07345C"; radius = 9; }
     if (existing) { existing.marker.setStyle({ fillColor: color }); existing.props = p; return; }
     var marker = L.circleMarker(ll, { radius: radius, color: "#fff", weight: 2, fillColor: color, fillOpacity: 1 }).addTo(mapLayers);
     marker.on("click", function () { openMapSheet(kind, p.id); });
@@ -827,8 +830,8 @@
       if (!map) return;
       var ll = [pos.coords.latitude, pos.coords.longitude];
       if (!meMarker) {
-        meAccuracy = L.circle(ll, { radius: pos.coords.accuracy || 30, color: "#0877BD", weight: 1, fillOpacity: 0.12 }).addTo(map);
-        meMarker = L.circleMarker(ll, { radius: 8, color: "#fff", weight: 3, fillColor: "#0877BD", fillOpacity: 1 }).addTo(map);
+        meAccuracy = L.circle(ll, { radius: pos.coords.accuracy || 30, color: "#0877BD", weight: 1, fillOpacity: 0.12, interactive: false }).addTo(map);
+        meMarker = L.circleMarker(ll, { radius: 8, color: "#fff", weight: 3, fillColor: "#0877BD", fillOpacity: 1, interactive: false }).addTo(map);
       } else { meMarker.setLatLng(ll); meAccuracy.setLatLng(ll).setRadius(pos.coords.accuracy || 30); }
       if (first && centerFirst) map.setView(ll, Math.max(map.getZoom(), 14));
       else if (following) map.panTo(ll, { animate: true, duration: 0.5 });
@@ -987,7 +990,7 @@
   function drawRoute() {
     var r = route.data;
     if (!map || !r) return;
-    route.line = L.polyline(r.coords, { color: "#0877BD", weight: 6, opacity: 0.85 }).addTo(map);
+    route.line = L.polyline(r.coords, { color: "#0877BD", weight: 6, opacity: 0.85, interactive: false, renderer: lineRenderer || undefined, pane: "ww-lines" }).addTo(map);
     route.marks = L.layerGroup().addTo(map);
     L.circleMarker(r.coords[0], { radius: 9, color: "#fff", weight: 3, fillColor: "#16A34A", fillOpacity: 1 }).addTo(route.marks);
     L.circleMarker(r.coords[r.coords.length - 1], { radius: 9, color: "#fff", weight: 3, fillColor: "#07345C", fillOpacity: 1 }).addTo(route.marks);
