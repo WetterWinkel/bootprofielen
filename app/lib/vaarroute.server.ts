@@ -32,6 +32,7 @@ export type RouteObject = {
   canOpen: boolean;
   clearance: number | null;
   pos: number; // meters vanaf begin van de edge
+  edge: number;
   lat: number;
   lon: number;
 };
@@ -221,7 +222,7 @@ export async function buildNetwork(log: (msg: string) => void = () => {}): Promi
     const o = openingsByBridge.get(p.id);
     const canOpen = kind === "lock" ? true : p.canopen === "Yes" || Boolean(o?.movable);
     const clearance = kind === "bridge" ? (o?.clearance ?? null) : null;
-    e.objects.push({ kind, id: Number(p.id), name: String(p.name || ""), city: String(p.city || ""), canOpen, clearance, pos, lat: c[1], lon: c[0] });
+    e.objects.push({ kind, id: Number(p.id), name: String(p.name || ""), city: String(p.city || ""), canOpen, clearance, pos, edge: hit.edge, lat: c[1], lon: c[0] });
     if (kind === "bridge" && !canOpen && clearance != null) e.blockedFor = Math.min(e.blockedFor, clearance);
     return true;
   };
@@ -376,9 +377,13 @@ export function planRoute(net: Network, from: Coord, to: Coord, airDraft: number
         // Zonder hoogtebeperking rekenen om te laten zien welke brug het probleem is.
         const free = planRoute(net, from, to, null);
         if (free.ok) {
-          const blockers = free.objects.filter(
+          const reached = (e: Edge) => distMap.has(e.a) || distMap.has(e.b);
+          const all = free.objects.filter(
             (o) => o.kind === "bridge" && !o.canOpen && o.clearance != null && o.clearance < airDraft + margin,
           );
+          // Alleen bruggen op de grens van wat wél bereikbaar is.
+          const edge = all.filter((o) => reached(net.edges[o.edge]));
+          const blockers = edge.length ? edge : all;
           const names = blockers.slice(0, 3).map((o) => `${o.name || "brug"} (${String(o.clearance).replace(".", ",")} m)`);
           return {
             ok: false,

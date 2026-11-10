@@ -240,3 +240,17 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ww-sheet-map .ww-specs-white .ww-spec { background: var(--bg); }
 .ww-map-screen .leaflet-top.leaflet-right { top: 56px; }
 .ww-map-tools, .ww-map-legend, .ww-map-hint { z-index: 1000; }
+
+/* Routeplanner */
+.ww-route-form { display: flex; flex-direction: column; gap: 10px; }
+.ww-geo-results { display: flex; flex-direction: column; gap: 4px; }
+.ww-geo-item { text-align: left; background: var(--bg); border: 0; border-radius: 10px; padding: 12px; font-size: 14px; cursor: pointer; min-height: 44px; }
+.ww-route-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ww-route-sum div { background: var(--teal-soft); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 2px; text-align: center; }
+.ww-route-sum strong { font-size: 17px; color: var(--navy); }
+.ww-route-sum span { font-size: 11px; color: var(--muted); }
+.ww-route-obj { width: 100%; background: none; border: 0; border-bottom: 1px solid #E9EEF2; text-align: left; cursor: pointer; font: inherit; }
+.ww-nav-bar { position: absolute; left: 10px; right: 64px; top: calc(70px + var(--safe-t)); z-index: 1001; background: var(--navy); color: #fff; border-radius: 12px; padding: 10px 12px; font-size: 14px; line-height: 1.4; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+.ww-nav-bar[hidden] { display: none; }
+.ww-map-head .ww-btn-sm { flex-shrink: 0; }
+.ww-nav-bar:not([hidden]) ~ .ww-map-legend { display: none; }
