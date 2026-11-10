@@ -1,0 +1,26 @@
+name: Vendor Leaflet (eenmalig)
+on:
+  push:
+    branches: [app]
+    paths: [".github/workflows/vendor-leaflet.yml"]
+permissions:
+  contents: write
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: app
+      - run: |
+          mkdir -p public/wetter-app/vendor/leaflet
+          cd /tmp && npm pack leaflet@1.9.4 && tar xzf leaflet-1.9.4.tgz
+          cp package/dist/leaflet.js package/dist/leaflet.css /home/runner/work/bootprofielen/bootprofielen/public/wetter-app/vendor/leaflet/
+          cp -r package/dist/images /home/runner/work/bootprofielen/bootprofielen/public/wetter-app/vendor/leaflet/
+          cp package/LICENSE /home/runner/work/bootprofielen/bootprofielen/public/wetter-app/vendor/leaflet/LICENSE
+      - run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add public/wetter-app/vendor/leaflet
+          git commit -m "Vendor Leaflet 1.9.4 (BSD-2) voor de vaarkaart"
+          git push origin app
