@@ -453,7 +453,7 @@
       '<div class="ww-nav-bar" data-nav-bar hidden></div>' +
       '<div id="ww-map" class="ww-map" role="application" aria-label="Vaarkaart"></div>' +
       '<div class="ww-map-tools"><button type="button" class="ww-map-btn ww-follow-btn' + (following ? " is-on" : "") + '" data-follow aria-pressed="' + following + '">' + ICON.pin + '<span data-follow-label>' + (following ? "Volgen" : "Vrij") + "</span></button></div>" +
-      '<div class="ww-map-legend"><span><i style="background:#16A34A"></i>Past eronder</span><span><i style="background:#EA8A00"></i>Moet open</span><span><i style="background:#DC2626"></i>Past niet</span><span><i style="background:#7C3AED"></i>Sluis</span></div>' +
+      '<div class="ww-map-legend"><span><i style="background:#16A34A"></i>Past eronder</span><span><i style="background:#EA8A00"></i>Moet open</span><span><i style="background:#DC2626"></i>Past niet</span><span><i style="background:#7C3AED"></i>Sluis</span><span><i style="background:#07345C"></i>Jachthaven</span><span><i style="background:#B45309"></i>Horeca</span><span><i style="background:#DB2777"></i>Supermarkt</span></div>' +
       '<div class="ww-map-hint" data-map-hint>Zoom in om bruggen en sluizen te zien</div>' +
       '<div class="ww-sheet-map" data-map-sheet hidden></div></div>';
   }
@@ -508,7 +508,8 @@
     ["veer", "Veerponten", true],
     ["helling", "Trailerhellingen", true],
     ["meldpunt", "Marifoon-meldpunten", false],
-    ["horeca", "Restaurants & cafés", false]
+    ["horeca", "Restaurants & cafés", true],
+    ["super", "Supermarkten", true]
   ];
   function layerOn(key) {
     var saved = null;
@@ -528,24 +529,30 @@
   }
   var poiTimer = null, lastPoiKey = "";
   function loadPois() {
-    if (!map || !layerOn("horeca") || map.getZoom() < 14) return;
+    if (!map || map.getZoom() < 13 || (!layerOn("horeca") && !layerOn("super") && !layerOn("havens"))) return;
     var b = map.getBounds();
     var bbox = [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()].map(function (n) { return n.toFixed(3); }).join(",");
     if (bbox === lastPoiKey) return;
     lastPoiKey = bbox;
-    var q = '[out:json][timeout:20];(nwr["amenity"~"^(restaurant|cafe|pub|bar|fast_food|ice_cream)$"](' + bbox + ');nwr["leisure"="marina"](' + bbox + ');nwr["waterway"="fuel"](' + bbox + '););out center tags 150;';
-    fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(q))
+    fetch(S.appPath + "/poi?bbox=" + bbox, { credentials: "same-origin", headers: { Accept: "application/json" } })
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        (d.elements || []).forEach(function (el) {
-          var lat = el.lat || (el.center && el.center.lat), lon = el.lon || (el.center && el.center.lon);
-          if (lat == null) return;
-          var tg = el.tags || {};
-          var kind = tg.leisure === "marina" ? "marina" : tg.waterway === "fuel" ? "fuel" : "poi";
-          addPoint(kind, "osm" + el.type + el.id, [lat, lon], tg, kind === "poi" ? "#B45309" : kind === "fuel" ? "#0F766E" : "#07345C", kind === "poi" ? 6 : 7);
+        if (!d || !d.success) return;
+        (d.items || []).forEach(function (it) {
+          var tg = it.tags || {};
+          var kind = tg.leisure === "marina" ? "marina" : tg.waterway === "fuel" ? "fuel" : tg.shop ? "shop" : "poi";
+          if (kind === "poi" && !layerOn("horeca")) return;
+          if (kind === "shop" && !layerOn("super")) return;
+          if ((kind === "marina" || kind === "fuel") && !layerOn("havens")) return;
+          if (kind === "marina" && Object.keys(mapObjects).some(function (k) {
+            var o = mapObjects[k]; if (o.kind !== "harbour") return false;
+            var ll = o.marker.getLatLng(); return Math.abs(ll.lat - it.lat) < 0.002 && Math.abs(ll.lng - it.lon) < 0.003;
+          })) return;
+          var color = kind === "poi" ? "#B45309" : kind === "shop" ? "#DB2777" : kind === "fuel" ? "#0F766E" : "#07345C";
+          addPoint(kind, it.id, [it.lat, it.lon], tg, color, kind === "marina" ? 8 : 6);
         });
       })
-      .catch(function () { /* OSM tijdelijk niet bereikbaar */ });
+      .catch(function () { /* kaartinformatie tijdelijk niet bereikbaar */ });
   }
 
   function addPoint(kind, id, ll, props, color, radius) {
@@ -590,9 +597,9 @@
       (btns.length ? '<div class="ww-sheet-actions">' + btns.join("") + "</div>" : "");
   }
   function loadHarbourContact(ll, name) {
-    var q = '[out:json][timeout:15];nwr(around:400,' + ll.lat.toFixed(5) + "," + ll.lng.toFixed(5) + ')["leisure"="marina"];out center tags 5;';
-    fetch("https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(q))
+    fetch(S.appPath + "/poi?near=" + ll.lat.toFixed(5) + "," + ll.lng.toFixed(5), { credentials: "same-origin", headers: { Accept: "application/json" } })
       .then(function (r) { return r.json(); })
+      .then(function (d) { return { elements: (d && d.items) || [] }; })
       .then(function (d) {
         var box = document.querySelector("[data-harbour-contact]");
         if (!box) return;
@@ -638,20 +645,20 @@
       sub = "Marifoon-meldpunt";
       var ch2 = []; try { ch2 = JSON.parse(p.vhfchannels || "[]"); } catch (e) { ch2 = []; }
       if (ch2.length) rows.push(["Marifoonkanaal", ch2.join(" / ")]);
-    } else if (kind === "poi" || kind === "marina" || kind === "fuel") {
-      title = p.name || (kind === "marina" ? "Jachthaven" : kind === "fuel" ? "Tankstation (water)" : "Horeca");
+    } else if (kind === "poi" || kind === "marina" || kind === "fuel" || kind === "shop") {
+      title = p.name || p.brand || (kind === "marina" ? "Jachthaven" : kind === "fuel" ? "Tankstation (water)" : kind === "shop" ? "Supermarkt" : "Horeca");
       var typeNl = { restaurant: "Restaurant", cafe: "Café", pub: "Kroeg", bar: "Bar", fast_food: "Snackbar", ice_cream: "IJs" };
-      sub = kind === "marina" ? "Jachthaven (OpenStreetMap)" : kind === "fuel" ? "Brandstof aan het water" : (typeNl[p.amenity] || "Horeca") + (p.cuisine ? " · " + p.cuisine.replace(/;/g, ", ") : "");
+      sub = kind === "shop" ? (p.shop === "convenience" ? "Buurtwinkel" : "Supermarkt") : kind === "marina" ? "Jachthaven (OpenStreetMap)" : kind === "fuel" ? "Brandstof aan het water" : (typeNl[p.amenity] || "Horeca") + (p.cuisine ? " · " + p.cuisine.replace(/;/g, ", ") : "");
       extra = contactHtml(p) || '<p class="ww-small" style="margin:0">Geen openingstijden of contactgegevens bekend.</p>';
     }
     var ll = o.marker.getLatLng ? o.marker.getLatLng() : o.marker.getBounds().getCenter();
-    var canFav = kind === "poi" || kind === "marina" || kind === "slipway" || kind === "ferry" || kind === "fuel";
+    var canFav = kind === "poi" || kind === "marina" || kind === "slipway" || kind === "ferry" || kind === "fuel" || kind === "shop";
     sheet.innerHTML = '<div class="ww-sheet-map-head"><div><strong>' + esc(title) + '</strong><span class="ww-small">' + esc(sub) + "</span></div>" +
       '<button type="button" class="ww-link" data-close-map-sheet aria-label="Sluiten" style="font-size:22px;min-width:44px;min-height:44px">×</button></div>' + extra +
       (rows.length ? '<div class="ww-list">' + rows.map(function (r) { return '<div class="ww-list-row"><span>' + esc(r[0]) + "</span><span>" + esc(r[1]) + "</span></div>"; }).join("") + "</div>" : "") +
       '<div class="ww-sheet-actions"><button type="button" class="ww-btn ww-btn-primary ww-btn-sm" data-route-to="' + ll.lat.toFixed(5) + "," + ll.lng.toFixed(5) + '" data-route-label="' + esc(title) + '">Vaar hierheen</button>' +
       (canFav ? '<button type="button" class="ww-btn ww-btn-ghost ww-btn-sm" data-fav="' + ll.lat.toFixed(5) + "," + ll.lng.toFixed(5) + '" data-fav-label="' + esc(title) + '">' + (isFav(ll.lat, ll.lng) ? "★ Favoriet" : "☆ Bewaar") + "</button>" : "") + "</div>" +
-      '<p class="ww-small" style="margin:0;opacity:.8">Bron: ' + (kind === "poi" || kind === "marina" || kind === "fuel" ? "OpenStreetMap" : "Rijkswaterstaat") + ". Controleer ter plaatse.</p>";
+      '<p class="ww-small" style="margin:0;opacity:.8">Bron: ' + (kind === "poi" || kind === "marina" || kind === "fuel" || kind === "shop" ? "OpenStreetMap" : "Rijkswaterstaat") + ". Controleer ter plaatse.</p>";
     sheet.hidden = false;
   }
 
@@ -1326,7 +1333,7 @@
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ message: question, profileId: S.boatId || "", conversationId: ui.captain.conversationId || "" })
     })
-      .then(function (r) { return r.json(); })
+      .then(function (r) { return r.json().catch(function () { throw new Error("Captain AI is even niet bereikbaar. Probeer het later opnieuw."); }); })
       .then(function (data) {
         if (!data || data.success === false) {
           if (data && data.limitReached) { ui.captain.limitReached = true; ui.captain.billing = data.billing || ui.captain.billing; }
@@ -1409,7 +1416,7 @@
       var ls = document.querySelector("[data-map-sheet]"); if (!ls) return;
       ls.innerHTML = '<div class="ww-sheet-map-head"><div><strong>Kaartlagen</strong></div><button type="button" class="ww-link" data-close-map-sheet aria-label="Sluiten" style="font-size:22px;min-width:44px;min-height:44px">×</button></div>' +
         LAYERS.map(function (l) { return '<label class="ww-toggle"><input type="checkbox" data-layer="' + l[0] + '"' + (layerOn(l[0]) ? " checked" : "") + "><span>" + esc(l[1]) + "</span></label>"; }).join("") +
-        '<p class="ww-small" style="margin:0">Horeca zie je als je dichtbij inzoomt. Bronnen: Rijkswaterstaat en OpenStreetMap.</p>';
+        '<p class="ww-small" style="margin:0">Horeca en supermarkten zie je als je dichtbij inzoomt. Bronnen: Rijkswaterstaat en OpenStreetMap.</p>';
       ls.hidden = false; return;
     }
     if (t.hasAttribute("data-voice")) { storageSet("ww-voice", voiceOn() ? "0" : "1"); if (voiceOn()) say("Spraak aan"); updateNavBar(); return; }
