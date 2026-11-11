@@ -52,6 +52,46 @@ function compact(el: any) {
   return { id: `${el.type}${el.id}`, lat, lon, tags };
 }
 
+// Marrekrite-ligplaatsen (Provincie Fryslân, publiek domein): alle ~680 in één keer.
+async function marrekrite() {
+  const hit = cache.get("marrekrite");
+  if (hit && Date.now() - hit.at < DAY) return hit.value;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(
+      "https://geoportaal.fryslan.nl/arcgis/services/ProvinciaalGeoRegister/PGR2/MapServer/WFSServer?service=WFS&request=GetFeature&version=2.0.0&typeNames=PGR:Ligplaatsen&count=5000&outputFormat=GEOJSON",
+      { signal: controller.signal, headers: { Accept: "application/json" } },
+    );
+    if (!response.ok) throw new Error(`Marrekrite ${response.status}`);
+    const data = await response.json();
+    const value = (data.features || []).flatMap((f: any) => {
+      const p = f.properties || {};
+      const c = f.geometry?.coordinates;
+      if (!c) return [];
+      return [{
+        id: `mk${p.OBJECTID}`,
+        lat: Number(c[1]),
+        lon: Number(c[0]),
+        tags: {
+          marrekrite: "yes",
+          nr: String(p.NR || ""),
+          name: String(p.LOCATIE_NL || ""),
+          name_fy: String(p.LOCATIE_FR || ""),
+          soort: String(p.SOORT || ""),
+          kamperen: String(p.CAMPEREN || ""),
+          container: String(p.CONTAINER || ""),
+          walverbinding: String(p.WALVERBINDING || ""),
+        },
+      }];
+    });
+    cache.set("marrekrite", { at: Date.now(), value });
+    return value;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function tile(tx: number, ty: number) {
   const key = `t:${tx}:${ty}`;
   const hit = cache.get(key);
@@ -82,6 +122,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const url = new URL(request.url);
     const rawCustomerId = String(url.searchParams.get("logged_in_customer_id") || "");
     if (!rawCustomerId || !previewAllowed(rawCustomerId)) return json({ success: false }, 404);
+
+    if (url.searchParams.get("marrekrite")) {
+      return json({ success: true, items: await marrekrite(), source: "Provincie Fryslân / Marrekrite (publiek domein)" });
+    }
 
     const near = String(url.searchParams.get("near") || "").split(",").map(Number);
     if (near.length === 2 && near.every(Number.isFinite)) {

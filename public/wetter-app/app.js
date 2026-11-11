@@ -453,7 +453,7 @@
       '<div class="ww-nav-bar" data-nav-bar hidden></div>' +
       '<div id="ww-map" class="ww-map" role="application" aria-label="Vaarkaart"></div>' +
       '<div class="ww-map-tools"><button type="button" class="ww-map-btn ww-follow-btn' + (following ? " is-on" : "") + '" data-follow aria-pressed="' + following + '">' + ICON.pin + '<span data-follow-label>' + (following ? "Volgen" : "Vrij") + "</span></button></div>" +
-      '<div class="ww-map-legend"><span><i style="background:#16A34A"></i>Past eronder</span><span><i style="background:#EA8A00"></i>Moet open</span><span><i style="background:#DC2626"></i>Past niet</span><span><i style="background:#7C3AED"></i>Sluis</span><span><i style="background:#07345C"></i>Jachthaven</span><span><i style="background:#B45309"></i>Horeca</span><span><i style="background:#DB2777"></i>Supermarkt</span></div>' +
+      '<div class="ww-map-legend"><span><i style="background:#16A34A"></i>Past eronder</span><span><i style="background:#EA8A00"></i>Moet open</span><span><i style="background:#DC2626"></i>Past niet</span><span><i style="background:#7C3AED"></i>Sluis</span><span><i style="background:#07345C"></i>Jachthaven</span><span><i style="background:#B45309"></i>Horeca</span><span><i style="background:#DB2777"></i>Supermarkt</span><span><i style="background:#0891B2"></i>Marrekrite</span></div>' +
       '<div class="ww-map-hint" data-map-hint>Zoom in om bruggen en sluizen te zien</div>' +
       '<div class="ww-sheet-map" data-map-sheet hidden></div></div>';
   }
@@ -509,7 +509,8 @@
     ["helling", "Trailerhellingen", true],
     ["meldpunt", "Marifoon-meldpunten", false],
     ["horeca", "Restaurants & cafés", true],
-    ["super", "Supermarkten", true]
+    ["super", "Supermarkten", true],
+    ["marrekrite", "Marrekrite-ligplaatsen", true]
   ];
   function layerOn(key) {
     var saved = null;
@@ -528,6 +529,25 @@
     return isFinite(n) && n > 0 && n < 10 ? n : null;
   }
   var poiTimer = null, lastPoiKey = "";
+  var marrekriteData = null, marrekriteLoading = false;
+  function loadMarrekrite() {
+    if (!map || !layerOn("marrekrite") || map.getZoom() < 11) return;
+    var b = map.getBounds().pad(0.2);
+    var draw = function () {
+      (marrekriteData || []).forEach(function (it) {
+        if (b.contains([it.lat, it.lon])) addPoint("marrekrite", it.id, [it.lat, it.lon], it.tags, "#0891B2", 7);
+      });
+    };
+    if (marrekriteData) { draw(); return; }
+    if (marrekriteLoading) return;
+    marrekriteLoading = true;
+    fetch(S.appPath + "/poi?marrekrite=1", { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (d && d.success) { marrekriteData = d.items || []; draw(); } })
+      .catch(function () { /* tijdelijk niet bereikbaar */ })
+      .then(function () { marrekriteLoading = false; });
+  }
+
   function loadPois() {
     if (!map || map.getZoom() < 13 || (!layerOn("horeca") && !layerOn("super") && !layerOn("havens"))) return;
     var b = map.getBounds();
@@ -639,6 +659,15 @@
     } else if (kind === "speed") {
       title = "Maximumsnelheid"; sub = "Vaarweg";
       rows.push(["Max. snelheid", (p.calibratedspeedup || p.calibratedspeeddown || "?") + " km/u"]);
+    } else if (kind === "marrekrite") {
+      title = (p.name || "Marrekrite-ligplaats") + (p.nr ? " (" + p.nr + ")" : "");
+      sub = "Marrekrite · gratis aanleggen, max. 3 dagen";
+      var yn = function (v) { return /^ja/i.test(v) ? "Ja" : /^nee/i.test(v) ? "Nee" : "Onbekend"; };
+      if (p.soort) rows.push(["Soort", p.soort.charAt(0).toUpperCase() + p.soort.slice(1)]);
+      rows.push(["Walverbinding", yn(p.walverbinding)]);
+      rows.push(["Afvalcontainer", yn(p.container)]);
+      rows.push(["Kamperen", yn(p.kamperen)]);
+      if (p.name_fy && p.name_fy !== p.name) rows.push(["Fries", p.name_fy]);
     } else if (kind === "ferry") { sub = "Veerpont / veersteiger"; }
     else if (kind === "slipway") { sub = "Trailerhelling"; if (p.amount) rows.push(["Aantal hellingen", p.amount]); }
     else if (kind === "callpoint") {
@@ -652,13 +681,13 @@
       extra = contactHtml(p) || '<p class="ww-small" style="margin:0">Geen openingstijden of contactgegevens bekend.</p>';
     }
     var ll = o.marker.getLatLng ? o.marker.getLatLng() : o.marker.getBounds().getCenter();
-    var canFav = kind === "poi" || kind === "marina" || kind === "slipway" || kind === "ferry" || kind === "fuel" || kind === "shop";
+    var canFav = kind === "poi" || kind === "marina" || kind === "slipway" || kind === "ferry" || kind === "fuel" || kind === "shop" || kind === "marrekrite";
     sheet.innerHTML = '<div class="ww-sheet-map-head"><div><strong>' + esc(title) + '</strong><span class="ww-small">' + esc(sub) + "</span></div>" +
       '<button type="button" class="ww-link" data-close-map-sheet aria-label="Sluiten" style="font-size:22px;min-width:44px;min-height:44px">×</button></div>' + extra +
       (rows.length ? '<div class="ww-list">' + rows.map(function (r) { return '<div class="ww-list-row"><span>' + esc(r[0]) + "</span><span>" + esc(r[1]) + "</span></div>"; }).join("") + "</div>" : "") +
       '<div class="ww-sheet-actions"><button type="button" class="ww-btn ww-btn-primary ww-btn-sm" data-route-to="' + ll.lat.toFixed(5) + "," + ll.lng.toFixed(5) + '" data-route-label="' + esc(title) + '">Vaar hierheen</button>' +
       (canFav ? '<button type="button" class="ww-btn ww-btn-ghost ww-btn-sm" data-fav="' + ll.lat.toFixed(5) + "," + ll.lng.toFixed(5) + '" data-fav-label="' + esc(title) + '">' + (isFav(ll.lat, ll.lng) ? "★ Favoriet" : "☆ Bewaar") + "</button>" : "") + "</div>" +
-      '<p class="ww-small" style="margin:0;opacity:.8">Bron: ' + (kind === "poi" || kind === "marina" || kind === "fuel" || kind === "shop" ? "OpenStreetMap" : "Rijkswaterstaat") + ". Controleer ter plaatse.</p>";
+      '<p class="ww-small" style="margin:0;opacity:.8">Bron: ' + (kind === "poi" || kind === "marina" || kind === "fuel" || kind === "shop" ? "OpenStreetMap" : kind === "marrekrite" ? "Provincie Fryslân / Marrekrite" : "Rijkswaterstaat") + ". Controleer ter plaatse.</p>";
     sheet.hidden = false;
   }
 
@@ -700,6 +729,7 @@
           (res[cfg[0]] || []).forEach(function (f) { var c = f.geometry && f.geometry.coordinates; if (c && f.geometry.type === "Point") addPoint(cfg[1], f.properties.id, [c[1], c[0]], f.properties, cfg[2], 6); });
         });
         clearTimeout(poiTimer); poiTimer = setTimeout(loadPois, 400);
+        loadMarrekrite();
         if (hint) hint.hidden = true;
       })
       .catch(function () { if (hint) { hint.hidden = false; hint.textContent = "Vaarwegdata niet bereikbaar"; } });
