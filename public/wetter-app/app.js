@@ -1215,12 +1215,30 @@
     return '<div class="ww-captain">' + head + '<div class="ww-chat" data-chat>' + body + "</div>" + composer + "</div>";
   }
 
+  function answerHtml(content) {
+    var a = null;
+    try { a = JSON.parse(content); } catch (e) { a = null; }
+    if (!a || typeof a !== "object" || !a.summary) return formatAnswer(content);
+    var out = formatAnswer(a.summary);
+    var list = function (title, items) {
+      items = (items || []).filter(Boolean);
+      if (!items.length) return "";
+      return (title ? "<p><strong>" + esc(title) + "</strong></p>" : "") + '<ul style="margin:0;padding-left:18px">' + items.map(function (t) { return "<li>" + formatAnswer(t).replace(/^<p>|<\/p>$/g, "") + "</li>"; }).join("") + "</ul>";
+    };
+    if (a.urgency === "stop" && (a.safety || []).length) out += '<div class="ww-notice">' + list("Let op", a.safety) + "</div>";
+    else out += list("Let op", a.safety);
+    out += list("Mogelijke oorzaken", a.causes) + list("Controleer", a.checks) + list("", a.solution);
+    if (a.follow_up && a.follow_up.trim() !== String(a.summary).trim()) out += "<p><strong>" + esc(a.follow_up) + "</strong></p>";
+    if ((a.choices || []).length) out += '<div class="ww-chips" style="flex-wrap:wrap">' + a.choices.map(function (c) { return '<button type="button" class="ww-chip" data-ask="' + esc(c) + '">' + esc(c) + "</button>"; }).join("") + "</div>";
+    return out;
+  }
+
   function messageHtml(m) {
     if (m.role === "USER") return '<div class="ww-msg ww-msg-user">' + esc(m.content) + "</div>";
     var products = (m.products || []).slice(0, 4).map(function (p) {
       return productCard({ title: p.title, vendor: p.vendor, url: p.url, image: p.imageUrl, price: p.price, variantId: p.available === false ? "" : p.variantId });
     }).join("");
-    return '<div class="ww-msg ww-msg-ai">' + formatAnswer(m.content) + products + "</div>";
+    return '<div class="ww-msg ww-msg-ai">' + answerHtml(m.content) + products + "</div>";
   }
 
   function limitNotice(c) {
