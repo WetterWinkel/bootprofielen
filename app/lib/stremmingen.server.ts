@@ -119,7 +119,10 @@ function tags(s: string, name: string) {
   return out;
 }
 function decode(s: string) {
-  return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+  return s
+    .replace(/&#(\d+);/g, (_, n) => (Number(n) === 13 ? "" : String.fromCharCode(Number(n))))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 }
 
 // "52 37.1248 N" -> 52.6187
@@ -152,7 +155,12 @@ function parsePeriods(block: string): Period[] {
     const start = when(ds, daily ? null : ts, false) ?? 0;
     const end = de ? when(de, daily ? null : te, !te || !!daily) : null;
     let label = `vanaf ${fmtDate(start)}${!daily && ts ? " " + ts.slice(0, 5) : ""}`;
-    if (end) label = `${fmtDate(start)}${!daily && ts ? " " + ts.slice(0, 5) : ""} – ${fmtDate(end)}${!daily && te ? " " + te.slice(0, 5) : ""}`;
+    if (end) {
+      const sameDay = fmtDate(start) === fmtDate(end);
+      label = sameDay
+        ? `${fmtDate(start)}${!daily && ts ? " " + ts.slice(0, 5) + (te ? "–" + te.slice(0, 5) : "") : ""}`
+        : `${fmtDate(start)}${!daily && ts ? " " + ts.slice(0, 5) : ""} – ${fmtDate(end)}${!daily && te ? " " + te.slice(0, 5) : ""}`;
+    }
     if (daily) label += ` (dagelijks ${daily.from}–${daily.to})`;
     return { start, end, daily, label };
   });
@@ -170,7 +178,7 @@ function parseMessage(xml: string): { key: string; serial: number; issued: numbe
   const subject = tag(ftm, "subject_code");
   const cancelled = subject === "CANCEL";
   const district = tag(xml, "district");
-  const contents = tag(ftm, "contents");
+  const contents = tag(ftm, "contents").replace(/\r/g, "").replace(/\n{3,}/g, "\n\n").trim();
   const reason = REASON_NL[tag(ftm, "reason_code")] ?? "";
   const phones: string[] = [], vhf: string[] = [];
   for (const c of tags(ftm, "communication")) {

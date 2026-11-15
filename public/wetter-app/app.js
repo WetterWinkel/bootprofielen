@@ -465,7 +465,7 @@
       '<div class="ww-nav-bar" data-nav-bar hidden></div>' +
       '<div id="ww-map" class="ww-map" role="application" aria-label="Vaarkaart"></div>' +
       '<div class="ww-map-tools"><button type="button" class="ww-map-btn ww-follow-btn' + (following ? " is-on" : "") + '" data-follow aria-pressed="' + following + '">' + ICON.pin + '<span data-follow-label>' + (following ? "Volgen" : "Vrij") + "</span></button></div>" +
-      '<div class="ww-map-legend"><span><i style="background:#16A34A"></i>Past eronder</span><span><i style="background:#EA8A00"></i>Moet open</span><span><i style="background:#DC2626"></i>Past niet</span><span><i style="background:#7C3AED"></i>Sluis</span><span><i style="background:#07345C"></i>Jachthaven</span><span><i style="background:#B45309"></i>Horeca</span><span><i style="background:#DB2777"></i>Supermarkt</span><span><i style="background:#0891B2"></i>Marrekrite</span></div>' +
+      '<div class="ww-map-legend"><span><i style="background:#16A34A"></i>Past eronder</span><span><i style="background:#EA8A00"></i>Moet open</span><span><i style="background:#DC2626"></i>Past niet</span><span><i style="background:#7C3AED"></i>Sluis</span><span><i style="background:#07345C"></i>Jachthaven</span><span><i style="background:#B45309"></i>Horeca</span><span><i style="background:#DB2777"></i>Supermarkt</span><span><i style="background:#0891B2"></i>Marrekrite</span><span><b class="ww-strem ww-strem-stremming ww-strem-mini">×</b>Gestremd</span><span><b class="ww-strem ww-strem-hinder ww-strem-mini">!</b>Hinder</span></div>' +
       '<div class="ww-map-hint" data-map-hint>Zoom in om bruggen en sluizen te zien</div>' +
       '<div class="ww-sheet-map" data-map-sheet hidden></div></div>';
   }
@@ -1144,10 +1144,10 @@
       eta.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }) + "</strong><span>aankomst</span></div></div>" +
       '<p class="ww-small" style="margin:0">' + opens.length + " brug" + (opens.length === 1 ? "" : "gen") + " moet" + (opens.length === 1 ? "" : "en") + " open · " + locks.length + " slui" + (locks.length === 1 ? "s" : "zen") + " · " + under.length + (under.length === 1 ? " brug" : " bruggen") + " waar je onderdoor past" +
       (r.air ? "" : ' · <button type="button" class="ww-link" data-airdraft>doorvaarthoogte instellen</button>') + "</p>" +
+      (r.blockedOnRoute && r.blockedOnRoute.length ? '<div class="ww-notice" style="background:#FEF2F2;border-color:#FCA5A5;color:#991B1B"><strong>Let op: deze route is nu gestremd</strong> bij ' + esc(r.blockedOnRoute.join(", ")) + ". Er is geen omweg gevonden. Bekijk het bericht hieronder of bel de bediening.</div>" :
+        r.detourFor && r.detourFor.length ? '<div class="ww-notice" style="background:#EFF6FF;border-color:#93C5FD;color:#1E3A8A">Route vaart om een stremming heen: ' + esc(r.detourFor.join(", ")) + ".</div>" : "") +
       '<button type="button" class="ww-btn ww-btn-primary" data-nav-start>Start navigatie</button>' +
       '<button type="button" class="ww-btn ww-btn-ghost ww-btn-sm" data-save-dest style="width:100%">' + (isFav(route.to.lat, route.to.lon) ? "★ Bewaard" : "☆ Bewaar bestemming") + "</button>";
-    if (r.blockedOnRoute && r.blockedOnRoute.length) html += '<div class="ww-notice" style="background:#FEF2F2;border-color:#FCA5A5;color:#991B1B"><strong>Let op: deze route is nu gestremd</strong> bij ' + esc(r.blockedOnRoute.join(", ")) + ". Er is geen omweg gevonden. Bekijk het bericht hieronder of bel de bediening.</div>";
-    else if (r.detourFor && r.detourFor.length) html += '<div class="ww-notice" style="background:#EFF6FF;border-color:#93C5FD;color:#1E3A8A">Route vaart om een stremming heen: ' + esc(r.detourFor.join(", ")) + ".</div>";
     var nts = (r.notices || []).filter(function (n) { return n.cat !== "info"; });
     if (nts.length) {
       html += '<p class="ww-small" style="margin:0"><strong>Scheepvaartberichten op je route</strong></p><div class="ww-list">' + nts.map(function (n) {

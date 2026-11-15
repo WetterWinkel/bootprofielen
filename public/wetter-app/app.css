@@ -274,3 +274,4 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ww-strem-hinder { background: #EA8A00; border-radius: 6px; }
 .ww-strem-info { background: #2563EB; font-style: italic; font-family: Georgia, serif; }
 .ww-strem-planned { opacity: .55; }
+.ww-strem-mini { display: inline-flex; width: 13px; height: 13px; font-size: 9px; border-width: 1px; margin-right: 5px; vertical-align: -2px; box-shadow: none; }

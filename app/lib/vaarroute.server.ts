@@ -123,7 +123,8 @@ async function loadNwb() {
 }
 
 function nearestSegment(net: Network, p: Coord, maxMeters: number) {
-  let best: { edge: number; seg: number; d: number; t: number; proj: Coord } | null = null;
+  type Hit = { edge: number; seg: number; d: number; t: number; proj: Coord };
+  let best = null as Hit | null;
   const cx = Math.floor(p[0] / CELL), cy = Math.floor(p[1] / CELL);
   const maxRing = Math.ceil(maxMeters / 600) + 1;
   for (let ring = 0; ring <= maxRing; ring++) {
@@ -493,7 +494,7 @@ export function blockedEdges(
     const s = nearestSegment(net, c, 80);
     if (!s) continue;
     const e = net.edges[s.edge];
-    let obj: RouteObject | null = null, best = 150;
+    let obj = null as RouteObject | null, best = 150;
     for (const o of e.objects) {
       const d = dist(c, [o.lon, o.lat]);
       if (d < best) { best = d; obj = o; }
