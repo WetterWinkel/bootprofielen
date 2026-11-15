@@ -8,9 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "== wsdl"; curl -s -m 30 "https://www.vaarweginformatie.nl/fdd/nts40?wsdl" | head -c 1500; echo
-          echo "== soap"; curl -s -m 60 -H 'Content-Type: text/xml; charset=utf-8' -H 'SOAPAction: ""' "https://www.vaarweginformatie.nl/fdd/nts40" --data '<?xml version="1.0"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><get_messages_query xmlns="http://www.ris.eu/nts.ms/4.0.4.0"><message_type>FTM</message_type></get_messages_query></soapenv:Body></soapenv:Envelope>' -o soap.xml; ls -la soap.xml; head -c 3000 soap.xml; echo
-          for u in "https://www.vaarweginformatie.nl/frp/api/messages/nts/summaries" "https://www.vaarweginformatie.nl/frp/api/messages/nts" "https://www.vaarweginformatie.nl/frp/api/nts/summaries" "https://www.vaarweginformatie.nl/frp/api/messages/summaries?type=NTS"; do echo "== $u"; curl -s -m 30 -w "\nHTTP %{http_code}\n" "$u" | head -c 800; echo; done
-          echo "== frp main"; curl -s -m 30 "https://www.vaarweginformatie.nl/frp/main/" | grep -o 'src="[^"]*\.js"' | head
-          JS=$(curl -s -m 30 "https://www.vaarweginformatie.nl/frp/main/" | grep -o 'src="[^"]*main[^"]*\.js"' | head -1 | sed 's/src="//;s/"//'); echo "js=$JS"
-          [ -n "$JS" ] && curl -s -m 30 "https://www.vaarweginformatie.nl/frp/main/$JS" | grep -o '"/\?frp/api/[^"]*"\|api/[a-z/]*nts[a-z/]*' | sort -u | head -40
+          echo "== xsd2"; curl -s -m 30 "https://www.vaarweginformatie.nl/fdd/nts40?xsd=2" | head -c 2500; echo
+          D=$(date -u +%Y-%m-%d)
+          echo "== soap"; curl -s -m 90 -H 'Content-Type: text/xml; charset=utf-8' -H 'SOAPAction: "http://www.ris.eu/nts.ms/get_messages"' "https://www.vaarweginformatie.nl/fdd/nts40" --data "<?xml version=\"1.0\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><get_messages_query xmlns=\"http://www.ris.eu/nts.ms/2.0.4.0\"><message_type>FTM</message_type><validity_period><date_start>$D</date_start><date_end>$D</date_end></validity_period></get_messages_query></soapenv:Body></soapenv:Envelope>" -o soap.xml; ls -la soap.xml; head -c 6000 soap.xml; echo; echo; grep -o "<[a-z_:]*fairway_section\|<[a-z_:]*object>" soap.xml | sort | uniq -c | head; grep -o "<[a-z0-9_:]*limitation_code>[^<]*" soap.xml | sort | uniq -c
+          echo "== summaries"; curl -s -m 30 -w "\nHTTP %{http_code}\n" "https://www.vaarweginformatie.nl/frp/api/messages/nts/summaries?from=${D}T00:00:00Z&until=${D}T23:59:59Z" -o sum.json; ls -la sum.json; head -c 2500 sum.json; echo
+          curl -s -m 30 "https://www.vaarweginformatie.nl/frp/main/main-TCNZHZV3.js" | grep -o 'api/[A-Za-z0-9_/{}$.-]*' | sort -u | head -60
