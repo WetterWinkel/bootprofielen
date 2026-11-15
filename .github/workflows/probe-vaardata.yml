@@ -3,13 +3,14 @@ on:
   push:
     branches: [app]
     paths: [".github/workflows/probe-vaardata.yml"]
+permissions: { contents: write }
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
       - run: |
           D=$(date -u +%Y-%m-%d); E=$(date -u -d '+14 days' +%Y-%m-%d)
-          curl -s -m 120 -H 'Content-Type: text/xml; charset=utf-8' -H 'SOAPAction: "http://www.ris.eu/nts.ms/get_messages"' "https://www.vaarweginformatie.nl/fdd/nts40" --data "<?xml version=\"1.0\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><get_messages_query xmlns=\"http://www.ris.eu/nts.ms/2.0.4.0\"><message_type>FTM</message_type><validity_period><date_start>$D</date_start><date_end>$E</date_end></validity_period></get_messages_query></soapenv:Body></soapenv:Envelope>" -o ftm.xml
-          ls -la ftm.xml; grep -o "<paging_result>.*</paging_result>" ftm.xml; grep -o "<result_error>[^<]*" ftm.xml | head
-      - uses: actions/upload-artifact@v4
-        with: { name: ftm, path: ftm.xml }
+          for o in 0 100 200 300 400; do
+          curl -s -m 120 -H 'Content-Type: text/xml; charset=utf-8' -H 'SOAPAction: "http://www.ris.eu/nts.ms/get_messages"' "https://www.vaarweginformatie.nl/fdd/nts40" --data "<?xml version=\"1.0\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><get_messages_query xmlns=\"http://www.ris.eu/nts.ms/2.0.4.0\"><message_type>FTM</message_type><validity_period><date_start>$D</date_start><date_end>$E</date_end></validity_period><paging_request><offset>$o</offset><limit>100</limit><total_count>true</total_count></paging_request></get_messages_query></soapenv:Body></soapenv:Envelope>" -o ftm$o.xml
+          ls -la ftm$o.xml; grep -o "<paging_result>.*</paging_result>" ftm$o.xml; done
+          mkdir out && mv ftm*.xml out/ && cd out && git init -q && git checkout -q -b probe-data && git add . && git -c user.name=probe -c user.email=p@p commit -qm data && git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" probe-data
