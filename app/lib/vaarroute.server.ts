@@ -309,7 +309,7 @@ export type RouteResult =
       snapToM: number;
     };
 
-export function planRoute(net: Network, from: Coord, to: Coord, airDraft: number | null): RouteResult {
+export function planRoute(net: Network, from: Coord, to: Coord, airDraft: number | null, avoid?: Set<number>): RouteResult {
   const margin = 0.1;
   const s = nearestSegment(net, from, 15000);
   const t = nearestSegment(net, to, 15000);
@@ -318,7 +318,8 @@ export function planRoute(net: Network, from: Coord, to: Coord, airDraft: number
   const es = net.edges[s.edge], et = net.edges[t.edge];
   const sPos = es.cum[s.seg] + (es.cum[s.seg + 1] - es.cum[s.seg]) * s.t;
   const tPos = et.cum[t.seg] + (et.cum[t.seg + 1] - et.cum[t.seg]) * t.t;
-  const passable = (e: Edge) => airDraft == null || e.blockedFor === Infinity || e.blockedFor >= airDraft + margin;
+  const passable = (e: Edge, ei: number) =>
+    !(avoid && avoid.has(ei)) && (airDraft == null || e.blockedFor === Infinity || e.blockedFor >= airDraft + margin);
 
   // Objecten tussen twee posities op een edge die je niet kunt passeren?
   const blockedBetween = (e: Edge, a: number, b: number) => {
@@ -367,7 +368,7 @@ export function planRoute(net: Network, from: Coord, to: Coord, airDraft: number
       if (end != null) relax(END, end, t.edge);
       for (const ei of net.adjacency.get(node) || []) {
         const e = net.edges[ei];
-        if (!passable(e)) continue;
+        if (!passable(e, ei)) continue;
         const other = e.a === node ? e.b : e.a;
         relax(other, e.len, ei);
       }
@@ -375,7 +376,7 @@ export function planRoute(net: Network, from: Coord, to: Coord, airDraft: number
     if (!prev.has(END)) {
       if (airDraft != null) {
         // Zonder hoogtebeperking rekenen om te laten zien welke brug het probleem is.
-        const free = planRoute(net, from, to, null);
+        const free = planRoute(net, from, to, null, avoid);
         if (free.ok) {
           const reached = (e: Edge) => distMap.has(e.a) || distMap.has(e.b);
           const all = free.objects.filter(
@@ -476,4 +477,34 @@ export function ensureNetwork(): Promise<Network> | null {
 
 export function currentNetwork() {
   return network;
+}
+
+// Vaarwegvakken die door een actuele stremming (bericht aan de scheepvaart) niet
+// bevaarbaar zijn. "Geen bediening" bij een brug telt alleen als je boot er niet
+// onderdoor past.
+export function blockedEdges(
+  net: Network,
+  points: Array<{ lat: number; lon: number; codes: string[]; name: string }>,
+  airDraft: number | null,
+) {
+  const edges = new Map<number, string>();
+  for (const p of points) {
+    const c: Coord = [p.lon, p.lat];
+    const s = nearestSegment(net, c, 80);
+    if (!s) continue;
+    const e = net.edges[s.edge];
+    let obj: RouteObject | null = null, best = 150;
+    for (const o of e.objects) {
+      const d = dist(c, [o.lon, o.lat]);
+      if (d < best) { best = d; obj = o; }
+    }
+    const obstructed = p.codes.includes("OBSTRU");
+    let block = obstructed;
+    if (!block && p.codes.includes("NOSERV")) {
+      if (obj?.kind === "lock") block = true;
+      else if (obj?.kind === "bridge") block = obj.canOpen && airDraft != null && obj.clearance != null && obj.clearance < airDraft + 0.1;
+    }
+    if (block) edges.set(s.edge, p.name);
+  }
+  return edges;
 }

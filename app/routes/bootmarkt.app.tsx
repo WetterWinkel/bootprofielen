@@ -4,6 +4,7 @@
 // Nieuwe, losstaande route. Raakt geen bestaande Bootmarkt-, Captain AI- of
 // bootprofielroutes aan. Alleen zichtbaar voor klant-id's in
 // APP_PREVIEW_CUSTOMER_IDS (standaard alleen Bernard).
+import { ensureStremmingen } from "../lib/stremmingen.server";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import prisma from "../db.server";
 import { authenticate, unauthenticated } from "../shopify.server";
@@ -20,7 +21,7 @@ import {
 } from "../lib/wetter-app.server";
 
 const APP_PATH = "/apps/bootmarkt/app";
-const ASSET_VERSION = "14";
+const ASSET_VERSION = "15";
 
 function assetBase() {
   return `${(process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "")}/wetter-app`;
@@ -128,6 +129,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     if (!rawCustomerId && process.env.APP_PREVIEW_CUSTOMER_IDS === "*") return page(loginPage());
     if (!rawCustomerId || !previewAllowed(rawCustomerId)) return page(comingSoonPage());
 
+    ensureStremmingen(); // stremmingen alvast op de achtergrond laden
     const { admin } = await unauthenticated.admin(shop);
     const customerId = customerGid(rawCustomerId);
     const [boats, firstName] = await Promise.all([

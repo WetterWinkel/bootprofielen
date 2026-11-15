@@ -402,6 +402,18 @@
         }).join("") + "</div></section>";
       }
     }
+    if (ui.place) {
+      if (!strem.items) loadStremmingen(function () { if (ui.tab === "vaarinfo") render(); });
+      var near = noticesNear(ui.place.lat, ui.place.lon, 25).slice(0, 8);
+      body += '<section class="ww-section"><h2>Stremmingen en hinder in de buurt</h2>' +
+        (!strem.items ? '<p class="ww-small">Scheepvaartberichten laden…</p>' : !near.length ? '<p class="ww-small">Geen stremmingen of hinder binnen 25 km. Goede vaart!</p>' :
+        '<div class="ww-list">' + near.map(function (x) {
+          var n = x.n, st = STREM_STYLE[n.cat];
+          return '<button type="button" class="ww-list-row ww-route-obj" data-notice="' + esc(n.id) + '"><span><span class="ww-strem ww-strem-' + n.cat + (n.status !== "nu" ? " ww-strem-planned" : "") + '" style="width:18px;height:18px;font-size:12px;display:inline-flex;vertical-align:-3px;margin-right:6px">' + st.sym + "</span>" + esc(n.name || "Bericht") +
+            '<br><span class="ww-small">' + esc(n.status === "nu" ? (n.limits[0] || st.label) : "Gepland: " + n.when) + " · " + x.d.toFixed(0) + " km</span></span><span>›</span></button>";
+        }).join("") + "</div>") +
+        '<p class="ww-small" style="margin:0">Bron: Rijkswaterstaat, berichten aan de scheepvaart. Elk uur ververst.</p></section>';
+    }
     body += '<section class="ww-section"><a class="ww-btn ww-btn-primary" href="#kaart">Open de vaarkaart</a></section>';
     body += '<section class="ww-section"><h2>Vaarwegen</h2><div class="ww-list">' +
       '<a class="ww-list-row ww-list-link" href="https://www.vaarweginformatie.nl/frp/main/#/geo/map" target="_blank" rel="noopener"><span>Bruggen &amp; sluizen</span><span>Bedieningstijden ›</span></a>' +
@@ -489,6 +501,13 @@
         L.popup().setLatLng(ev.latlng).setContent('<button type="button" class="ww-btn ww-btn-primary ww-btn-sm" data-route-here>Vaar hierheen</button>').openOn(map);
       });
       loadMapData();
+      loadStremmingen(function () {
+        drawStremmingen();
+        if (ui.pendingNotice && strem.byId[ui.pendingNotice]) {
+          var pn = strem.byId[ui.pendingNotice]; ui.pendingNotice = null;
+          map.setView([pn.lat, pn.lon], 14); openNoticeSheet(pn.id);
+        }
+      });
       startWatch(!saved && !route.data);
       if (route.data) drawRoute();
     }).catch(function (err) { toast(err.message); });
@@ -500,6 +519,9 @@
   }
 
   var LAYERS = [
+    ["strem", "Stremmingen", true],
+    ["hinder", "Hinder & beperkingen", true],
+    ["berichten", "Overige scheepvaartberichten", false],
     ["bruggen", "Bruggen & sluizen", true],
     ["havens", "Jachthavens", true],
     ["kabels", "Hoogspanning & kabels", true],
@@ -546,6 +568,79 @@
       .then(function (d) { if (d && d.success) { marrekriteData = d.items || []; draw(); } })
       .catch(function () { /* tijdelijk niet bereikbaar */ })
       .then(function () { marrekriteLoading = false; });
+  }
+
+  // ---------- Stremmingen (berichten aan de scheepvaart, Rijkswaterstaat) ----------
+  var strem = { items: null, loading: false, at: 0, layer: null, byId: {} };
+  var STREM_STYLE = { stremming: { color: "#DC2626", sym: "×", label: "Gestremd" }, hinder: { color: "#EA8A00", sym: "!", label: "Hinder" }, info: { color: "#2563EB", sym: "i", label: "Bericht" } };
+  function stremLayerKey(cat) { return cat === "stremming" ? "strem" : cat === "hinder" ? "hinder" : "berichten"; }
+  function loadStremmingen(cb, attempt) {
+    attempt = attempt || 0;
+    if (strem.items && Date.now() - strem.at < 30 * 60000) { if (cb) cb(); return; }
+    if (strem.loading) return;
+    strem.loading = true;
+    fetch(S.appPath + "/stremmingen", { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        strem.loading = false;
+        if (d && d.preparing && attempt < 20) { setTimeout(function () { loadStremmingen(cb, attempt + 1); }, 4000); return; }
+        if (!d || !d.success) return;
+        strem.items = d.items || []; strem.at = Date.now(); strem.updatedAt = d.updatedAt; strem.byId = {};
+        strem.items.forEach(function (n) { strem.byId[n.id] = n; });
+        if (cb) cb();
+      })
+      .catch(function () { strem.loading = false; });
+  }
+  function drawStremmingen() {
+    if (!map || !strem.items) return;
+    if (strem.layer) map.removeLayer(strem.layer);
+    strem.layer = L.layerGroup().addTo(map);
+    var order = { info: 0, hinder: 1, stremming: 2 };
+    strem.items.slice().sort(function (a, b) { return order[a.cat] - order[b.cat]; }).forEach(function (n) {
+      if (!layerOn(stremLayerKey(n.cat))) return;
+      var st = STREM_STYLE[n.cat], planned = n.status !== "nu";
+      if (n.line) L.polyline(n.line, { color: st.color, weight: 6, opacity: planned ? 0.35 : 0.7, dashArray: planned ? "6 8" : null, renderer: lineRenderer || undefined, pane: "ww-lines" })
+        .on("click", function () { openNoticeSheet(n.id); }).addTo(strem.layer);
+      var icon = L.divIcon({ className: "", iconSize: [26, 26], iconAnchor: [13, 13],
+        html: '<span class="ww-strem ww-strem-' + n.cat + (planned ? " ww-strem-planned" : "") + '">' + st.sym + "</span>" });
+      L.marker([n.lat, n.lon], { icon: icon, keyboard: false, title: n.name }).on("click", function () { openNoticeSheet(n.id); }).addTo(strem.layer);
+    });
+  }
+  function noticeHtml(n, compact) {
+    var st = STREM_STYLE[n.cat];
+    var badge = n.status === "nu" ? (n.cat === "stremming" ? (n.rightNow === false ? "Gestremd binnen venster" : "Nu gestremd") : n.cat === "hinder" ? "Nu van kracht" : "Actueel") : "Gepland";
+    var rows = [];
+    if (n.limits && n.limits.length) rows.push(["Beperking", n.limits.join(", ")]);
+    if (n.when) rows.push(["Wanneer", n.when]);
+    if (n.reason) rows.push(["Reden", n.reason.charAt(0).toUpperCase() + n.reason.slice(1)]);
+    if (n.vhf && n.vhf.length) rows.push(["Marifoon", n.vhf.map(function (v) { return "kanaal " + v; }).join(" / ")]);
+    var html = '<div class="ww-verdict" style="border-color:' + st.color + '"><span style="background:' + st.color + '"></span>' + esc(badge) + (n.limits && n.limits.length ? " · " + esc(n.limits[0]) : "") + "</div>" +
+      (n.contents ? '<p class="ww-small" style="margin:0">' + esc(n.contents) + "</p>" : "") +
+      '<div class="ww-list">' + rows.map(function (r) { return '<div class="ww-list-row"><span>' + esc(r[0]) + "</span><span>" + esc(r[1]) + "</span></div>"; }).join("") + "</div>";
+    if (!compact && n.phones && n.phones.length) {
+      html += '<div class="ww-sheet-actions">' + n.phones.slice(0, 2).map(function (ph) {
+        var parts = String(ph).split(","), nr = parts[0].replace(/[^0-9+]/g, "");
+        return '<a class="ww-btn ww-btn-ghost ww-btn-sm" href="tel:' + esc(nr) + '">Bel ' + esc((parts[1] || parts[0]).trim()) + "</a>";
+      }).join("") + "</div>";
+    }
+    return html;
+  }
+  function openNoticeSheet(id) {
+    var n = strem.byId[id] || (route.data && (route.data.notices || []).filter(function (x) { return x.id === id; })[0]);
+    var sheet = document.querySelector("[data-map-sheet]");
+    if (!n || !sheet) return;
+    sheet.innerHTML = '<div class="ww-sheet-map-head"><div><strong>' + esc(n.name || "Scheepvaartbericht") + '</strong><span class="ww-small">' + esc((n.type || "") + (n.fairway ? " · " + n.fairway : "")) + "</span></div>" +
+      '<button type="button" class="ww-link" data-close-map-sheet aria-label="Sluiten" style="font-size:22px;min-width:44px;min-height:44px">×</button></div>' + noticeHtml(n) +
+      '<p class="ww-small" style="margin:0;opacity:.8">Bron: Rijkswaterstaat, bericht aan de scheepvaart ' + esc(n.msg || "") + '. Elk uur ververst. <a href="https://www.vaarweginformatie.nl/frp/main/#/nts/map" target="_blank" rel="noopener">Officieel bericht ›</a></p>';
+    sheet.hidden = false;
+  }
+  function noticesNear(lat, lon, km) {
+    if (!strem.items) return [];
+    return strem.items.map(function (n) {
+      var dy = (n.lat - lat) * 111.32, dx = (n.lon - lon) * 111.32 * Math.cos(lat * Math.PI / 180);
+      return { n: n, d: Math.sqrt(dx * dx + dy * dy) };
+    }).filter(function (x) { return x.d <= km && x.n.cat !== "info"; })
+      .sort(function (a, b) { return (a.n.status === "nu" ? 0 : 1) - (b.n.status === "nu" ? 0 : 1) || (a.n.cat === "stremming" ? 0 : 1) - (b.n.cat === "stremming" ? 0 : 1) || a.d - b.d; });
   }
 
   function loadPois() {
@@ -1051,6 +1146,16 @@
       (r.air ? "" : ' · <button type="button" class="ww-link" data-airdraft>doorvaarthoogte instellen</button>') + "</p>" +
       '<button type="button" class="ww-btn ww-btn-primary" data-nav-start>Start navigatie</button>' +
       '<button type="button" class="ww-btn ww-btn-ghost ww-btn-sm" data-save-dest style="width:100%">' + (isFav(route.to.lat, route.to.lon) ? "★ Bewaard" : "☆ Bewaar bestemming") + "</button>";
+    if (r.blockedOnRoute && r.blockedOnRoute.length) html += '<div class="ww-notice" style="background:#FEF2F2;border-color:#FCA5A5;color:#991B1B"><strong>Let op: deze route is nu gestremd</strong> bij ' + esc(r.blockedOnRoute.join(", ")) + ". Er is geen omweg gevonden. Bekijk het bericht hieronder of bel de bediening.</div>";
+    else if (r.detourFor && r.detourFor.length) html += '<div class="ww-notice" style="background:#EFF6FF;border-color:#93C5FD;color:#1E3A8A">Route vaart om een stremming heen: ' + esc(r.detourFor.join(", ")) + ".</div>";
+    var nts = (r.notices || []).filter(function (n) { return n.cat !== "info"; });
+    if (nts.length) {
+      html += '<p class="ww-small" style="margin:0"><strong>Scheepvaartberichten op je route</strong></p><div class="ww-list">' + nts.map(function (n) {
+        var st = STREM_STYLE[n.cat];
+        return '<button type="button" class="ww-list-row ww-route-obj" data-notice="' + esc(n.id) + '"><span><span class="ww-strem ww-strem-' + n.cat + (n.status !== "nu" ? " ww-strem-planned" : "") + '" style="width:18px;height:18px;font-size:12px;display:inline-flex;vertical-align:-3px;margin-right:6px">' + st.sym + "</span>km " + (n.atM / 1000).toFixed(1).replace(".", ",") + " · " + esc(n.name || "Bericht") + "</span><span>" +
+          esc(n.status === "nu" ? (n.limits[0] || st.label) : "Gepland") + " ›</span></button>";
+      }).join("") + "</div>";
+    }
     var list = r.objects.filter(function (o) { return o.kind === "lock" || o.mustOpen; });
     if (list.length) {
       html += '<div class="ww-list">' + list.map(function (o) {
@@ -1097,6 +1202,14 @@
         }
       });
     }
+    (route.data.notices || []).forEach(function (n) {
+      if (n.cat === "info" || n.status !== "nu") return;
+      var dn2 = n.atM - pos.alongM, key2 = "n:" + n.id;
+      if (dn2 > 0 && dn2 <= 1500 && !spoken[key2]) {
+        spoken[key2] = true;
+        say("Let op. Over " + spokenDistance(dn2) + ", " + (n.name || "scheepvaartbericht") + ": " + (n.limits[0] || (n.cat === "stremming" ? "gestremd" : "hinder")) + ".");
+      }
+    });
     if (pos.offM > 150 && !spoken.off) { spoken.off = true; say("Je bent van de route af."); }
     if (pos.offM < 60) spoken.off = false;
     bar.innerHTML = '<button type="button" class="ww-voice" data-voice aria-label="Spraak aan of uit">' + (voiceOn() ? "🔊" : "🔇") + "</button><strong>" + fmtKm(left) + "</strong> te gaan · ±" + fmtDur(left / 1852 / speedKn() * 60) +
@@ -1487,6 +1600,13 @@
     if (t.hasAttribute("data-route-open")) { e.preventDefault(); openRoutePanel(); return; }
     if (t.hasAttribute("data-route-here")) { if (map) map.closePopup(); planRoute(); return; }
     if (t.hasAttribute("data-route-clear")) { clearRoute(); var rs = document.querySelector("[data-map-sheet]"); if (rs) rs.hidden = true; return; }
+    if (t.hasAttribute("data-notice")) {
+      var nid = t.getAttribute("data-notice");
+      var nn = strem.byId[nid] || (route.data && (route.data.notices || []).filter(function (x) { return x.id === nid; })[0]);
+      if (nn && map && ui.tab === "kaart") map.setView([nn.lat, nn.lon], Math.max(map.getZoom(), 14));
+      if (ui.tab !== "kaart") { ui.pendingNotice = nid; location.hash = "#kaart"; return; }
+      openNoticeSheet(nid); return;
+    }
     if (t.hasAttribute("data-route-obj")) {
       var parts = t.getAttribute("data-route-obj").split(":");
       var obj = (route.data.objects || []).filter(function (o) { return o.kind === parts[0] && String(o.id) === parts[1]; })[0];
@@ -1570,7 +1690,7 @@
     var el = e.target;
     if (el && el.hasAttribute && el.hasAttribute("data-layer")) {
       setLayer(el.getAttribute("data-layer"), el.checked);
-      if (map && mapLayers) { mapLayers.clearLayers(); mapObjects = {}; lastPoiKey = ""; loadMapData(); }
+      if (map && mapLayers) { mapLayers.clearLayers(); mapObjects = {}; lastPoiKey = ""; loadMapData(); drawStremmingen(); }
     }
   });
 

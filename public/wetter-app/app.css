@@ -267,3 +267,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ww-map-screen:has(.ww-nav-bar:not([hidden])) .ww-map-tools { top: calc(150px + var(--safe-t)); }
 .ww-map-screen:has(.ww-nav-bar:not([hidden])) .ww-map-tools-left { top: calc(200px + var(--safe-t)); }
 .ww-map-screen:has(.ww-nav-bar:not([hidden])) .leaflet-top.leaflet-right { top: 180px; }
+
+/* Stremmingen (berichten aan de scheepvaart) */
+.ww-strem { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff; color: #fff; font: 800 15px/1 system-ui, sans-serif; box-shadow: 0 1px 4px rgba(0,0,0,.35); box-sizing: border-box; }
+.ww-strem-stremming { background: #DC2626; }
+.ww-strem-hinder { background: #EA8A00; border-radius: 6px; }
+.ww-strem-info { background: #2563EB; font-style: italic; font-family: Georgia, serif; }
+.ww-strem-planned { opacity: .55; }
