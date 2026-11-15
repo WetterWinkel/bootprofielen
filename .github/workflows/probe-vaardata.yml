@@ -8,8 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "== xsd2"; curl -s -m 30 "https://www.vaarweginformatie.nl/fdd/nts40?xsd=2" | head -c 2500; echo
-          D=$(date -u +%Y-%m-%d)
-          echo "== soap"; curl -s -m 90 -H 'Content-Type: text/xml; charset=utf-8' -H 'SOAPAction: "http://www.ris.eu/nts.ms/get_messages"' "https://www.vaarweginformatie.nl/fdd/nts40" --data "<?xml version=\"1.0\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><get_messages_query xmlns=\"http://www.ris.eu/nts.ms/2.0.4.0\"><message_type>FTM</message_type><validity_period><date_start>$D</date_start><date_end>$D</date_end></validity_period></get_messages_query></soapenv:Body></soapenv:Envelope>" -o soap.xml; ls -la soap.xml; head -c 6000 soap.xml; echo; echo; grep -o "<[a-z_:]*fairway_section\|<[a-z_:]*object>" soap.xml | sort | uniq -c | head; grep -o "<[a-z0-9_:]*limitation_code>[^<]*" soap.xml | sort | uniq -c
-          echo "== summaries"; curl -s -m 30 -w "\nHTTP %{http_code}\n" "https://www.vaarweginformatie.nl/frp/api/messages/nts/summaries?from=${D}T00:00:00Z&until=${D}T23:59:59Z" -o sum.json; ls -la sum.json; head -c 2500 sum.json; echo
-          curl -s -m 30 "https://www.vaarweginformatie.nl/frp/main/main-TCNZHZV3.js" | grep -o 'api/[A-Za-z0-9_/{}$.-]*' | sort -u | head -60
+          D=$(date -u +%Y-%m-%d); E=$(date -u -d '+14 days' +%Y-%m-%d)
+          curl -s -m 120 -H 'Content-Type: text/xml; charset=utf-8' -H 'SOAPAction: "http://www.ris.eu/nts.ms/get_messages"' "https://www.vaarweginformatie.nl/fdd/nts40" --data "<?xml version=\"1.0\"?><soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\"><soapenv:Body><get_messages_query xmlns=\"http://www.ris.eu/nts.ms/2.0.4.0\"><message_type>FTM</message_type><validity_period><date_start>$D</date_start><date_end>$E</date_end></validity_period></get_messages_query></soapenv:Body></soapenv:Envelope>" -o ftm.xml
+          ls -la ftm.xml; grep -o "<paging_result>.*</paging_result>" ftm.xml; grep -o "<result_error>[^<]*" ftm.xml | head
+      - uses: actions/upload-artifact@v4
+        with: { name: ftm, path: ftm.xml }
