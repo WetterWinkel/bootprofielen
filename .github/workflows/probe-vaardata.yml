@@ -8,11 +8,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          W="https://geo.rijkswaterstaat.nl/services/ogc/gdr/fis_vnds/ows?service=WFS&version=2.0.0"
+          W="https://geo.rijkswaterstaat.nl/services/ogc/gdr/nwp_basisrecreatietoervaartnetwerk/ows?service=WFS&version=2.0.0"
           curl -s -m 60 "$W&request=GetCapabilities" | grep -o "<Name>[^<]*</Name>" | sed 's/<[^>]*>//g' | tr '\n' ' '; echo
-          echo "== kabel"; curl -s -m 60 "$W&request=GetFeature&outputFormat=application/json&typeName=bovengrondse_kabel&count=2" | head -c 1500; echo
-          echo "== brug sample"; curl -s -m 60 "$W&request=GetFeature&outputFormat=application/json&typeName=brug&count=1" | head -c 1200; echo
-          echo "== nwb"; curl -s -m 60 "https://api.pdok.nl/rws/nationaal-wegenbestand-vaarwegen/ogc/v1/collections?f=json" | grep -o '"id":"[^"]*"' | head; 
-          C=$(curl -s -m 60 "https://api.pdok.nl/rws/nationaal-wegenbestand-vaarwegen/ogc/v1/collections?f=json" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-          curl -s -m 60 "https://api.pdok.nl/rws/nationaal-wegenbestand-vaarwegen/ogc/v1/collections/$C/items?f=json&limit=1" | head -c 1500; echo
-          for t in $(curl -s -m 60 "$W&request=GetCapabilities" | grep -o "<Name>[^<]*</Name>" | sed 's/<[^>]*>//g' | grep -i "mast\|route\|recrea\|cemt\|fairway\|vaarweg"); do echo "== $t"; curl -s -m 60 "$W&request=GetFeature&outputFormat=application/json&typeName=$t&count=1" | head -c 1000; echo; done
+          for t in $(curl -s -m 60 "$W&request=GetCapabilities" | grep -o "<Name>[^<]*</Name>" | sed 's/<[^>]*>//g'); do
+            echo "== $t"; curl -s -m 120 "$W&request=GetFeature&outputFormat=application/json&typeName=$t&srsName=EPSG:4326" -o f.json; ls -la f.json
+            python3 -c "
+          import json,collections; d=json.load(open('f.json')); fs=d['features']; print(len(fs)); print({k:v for k,v in fs[0]['properties'].items()}); 
+          for k in fs[0]['properties']:
+              c=collections.Counter(str(f['properties'].get(k)) for f in fs)
+              if len(c)<25: print(k, dict(c))
+          print(fs[0]['geometry']['type'], str(fs[0]['geometry']['coordinates'])[:120])"
+          done
+          echo "== vaarwegclassificatie"; curl -s -m 60 "https://geo.rijkswaterstaat.nl/services/ogc/gdr/fis_vnds/ows?service=WFS&version=2.0.0&request=GetFeature&outputFormat=application/json&typeName=vaarwegclassificatie&count=3" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('totalFeatures')); [print(f['properties']) for f in d['features']]"
