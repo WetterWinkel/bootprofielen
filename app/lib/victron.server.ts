@@ -159,6 +159,7 @@ export async function vrmSnapshot(token: string, idSite: number) {
   const ttg = pick(recs, /battery/, ["/TimeToGo"], [/time to go/i]);
   const temp = pick(recs, /battery/, ["/Dc/0/Temperature"], [/battery temperature/i]);
   // Zonne-energie: alle laadregelaars bij elkaar.
+  console.log("[victron-debug]", JSON.stringify(recs.filter((x) => /solarcharger/.test(String(x.dbusServiceType || ""))).slice(0, 8).map((x) => [x.dbusPath, x.description, x.rawValue])));
   const pvRecs = recs.filter((x) => /solarcharger/.test(String(x.dbusServiceType || "")) && x.dbusPath === "/Yield/Power");
   let pv: number | null = pvRecs.length ? pvRecs.reduce((s, r) => s + (num(r.rawValue) || 0), 0) : null;
   if (pv == null) pv = val(pick(recs, /system/, ["/Dc/Pv/Power"], [/^pv - dc-coupled$/i, /pv power/i]));
