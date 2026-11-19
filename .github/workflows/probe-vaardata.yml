@@ -20,11 +20,7 @@ jobs:
           const tok = j.token; console.log("demo token", !!tok, j.idUser);
           console.log("enc/dec", v.decrypt(v.encrypt("hallo")) === "hallo");
           let me; try { me = await v.vrmMe(tok); console.log("me", me); } catch (e) { console.log("me fout", e.message); me = { idUser: j.idUser || 22 }; }
-          for (const site of [151734, 151755]) for (const w of ["BatterySummary", "Status", "SolarChargerSummary", "TankSummary", "VeBusState"]) {
-            const r = await fetch(`https://vrmapi.victronenergy.com/v2/installations/${site}/widgets/${w}`, { headers: { "X-Authorization": "Bearer " + tok } });
-            const j = await r.json().catch(() => ({})); const d = j.records && j.records.data || {};
-            console.log("W", site, w, r.status, JSON.stringify(Object.fromEntries(Object.entries(d).slice(0, 14))).slice(0, 1600));
-          }
+          for (const site of [151734, 151755, 219742]) { try { const sn = await v.vrmSnapshot(tok, site); const { groups, ...rest } = sn; console.log("SNAP", site, JSON.stringify(rest)); console.log("GROUPS", groups.map(g => g.device + "(" + g.values.length + ")").join(", ")); } catch (e) { console.log("SNAPFOUT", site, e.message); } }
           process.exit(0);
           const vr = await import("./vaarroute.mjs");
           const l = await vr.loadStaandeMast(); console.log("SMR lijnen", l.length, l.reduce((s, x) => s + x.coords.length, 0), "punten");

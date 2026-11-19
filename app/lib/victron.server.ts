@@ -46,9 +46,14 @@ async function vrm(token: string, path: string) {
       signal: ctrl.signal,
     });
     const data: any = await res.json().catch(() => ({}));
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       const e: any = new Error("Victron weigert het token. Maak in VRM een nieuw toegangstoken aan.");
       e.status = 401;
+      throw e;
+    }
+    if (res.status === 403) {
+      const e: any = new Error("Je VRM-account heeft geen rechten voor deze gegevens.");
+      e.status = 403;
       throw e;
     }
     if (!res.ok || data?.success === false) throw new Error(data?.errors ? String(data.errors) : `VRM gaf fout ${res.status}`);
@@ -105,9 +110,47 @@ function pick(recs: Diag[], service: RegExp, paths: string[], descs: RegExp[]) {
 
 const FLUID: Record<number, string> = { 0: "Brandstof", 1: "Zoet water", 2: "Grijs water", 3: "Levend water", 4: "Olie", 5: "Zwart water", 6: "Benzine", 7: "Diesel", 8: "LPG", 9: "LNG", 10: "Hydraulische olie", 11: "Drinkwater" };
 
+// Zonder diagnoserechten (bijv. gedeelde installaties): waarden via de widgets ophalen.
+const WIDGET_FOR: Array<[RegExp, string]> = [
+  [/battery monitor|bms|battery/i, "BatterySummary"],
+  [/solar charger|mppt/i, "SolarChargerSummary"],
+  [/ve\.bus|multi|quattro|inverter/i, "Status"],
+  [/tank/i, "TankSummary"],
+];
+async function widgetRecords(token: string, idSite: number): Promise<Diag[]> {
+  const ov = await vrm(token, `/installations/${idSite}/system-overview`).catch(() => null);
+  const devices: any[] = ov?.records?.devices || [];
+  const calls: Array<Promise<Diag[]>> = [];
+  const seen = new Set<string>();
+  for (const dev of devices) {
+    const w = WIDGET_FOR.find(([re]) => re.test(String(dev.name || "")))?.[1];
+    if (!w || dev.instance == null) continue;
+    const key = `${w}:${dev.instance}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    calls.push(
+      vrm(token, `/installations/${idSite}/widgets/${w}?instance=${dev.instance}`)
+        .then((d) =>
+          Object.values(d?.records?.data || {})
+            .filter((x: any) => x && typeof x === "object" && "rawValue" in x)
+            .map((x: any) => ({ ...x, Device: dev.customName || dev.name, description: x.dataAttributeName, timestamp: Math.round(Date.now() / 1000 - (Number(x.secondsAgo) || 0)) })),
+        )
+        .catch(() => [] as Diag[]),
+    );
+  }
+  if (!calls.length) calls.push(vrm(token, `/installations/${idSite}/widgets/BatterySummary`).then((d) => Object.values(d?.records?.data || {}).filter((x: any) => x && "rawValue" in x).map((x: any) => ({ ...x, Device: "Accu", description: x.dataAttributeName }))));
+  return (await Promise.all(calls)).flat();
+}
+
 export async function vrmSnapshot(token: string, idSite: number) {
-  const d = await vrm(token, `/installations/${idSite}/diagnostics?count=1000`);
-  const recs: Diag[] = d.records || [];
+  let recs: Diag[];
+  try {
+    const d = await vrm(token, `/installations/${idSite}/diagnostics?count=1000`);
+    recs = d.records || [];
+  } catch (error: any) {
+    if (error?.status !== 403) throw error;
+    recs = await widgetRecords(token, idSite);
+  }
   const val = (r: Diag | null) => (r ? num(r.rawValue) : null);
   const soc = pick(recs, /battery/, ["/Soc"], [/^state of charge$/i, /^battery soc/i]);
   const volt = pick(recs, /battery/, ["/Dc/0/Voltage"], [/^voltage$/i, /battery voltage/i]);
