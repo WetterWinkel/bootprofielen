@@ -33,7 +33,25 @@ function Extension() {
   const [claimCode, setClaimCode] = useState('');
 
   const update = (key, value) =>
-    setForm((old) => ({...old, [key]: value}));
+    setForm((old) => {
+      const next = {...old, [key]: value};
+      // Masthoogte is bij een staande mast ook de doorvaarthoogte.
+      if (key === 'masthoogte' && (!old.doorvaarthoogte || old.doorvaarthoogte === old.masthoogte)) {
+        next.doorvaarthoogte = value;
+      }
+      return next;
+    });
+
+  // Kies het hoofdtype; vul logische standaardwaarden alleen in als ze nog leeg zijn.
+  const chooseType = (type) =>
+    setForm((old) => {
+      const next = {...old, boottype: type};
+      const standaard = STANDAARD[type] || {};
+      for (const [key, value] of Object.entries(standaard)) {
+        if (!next[key]) next[key] = value;
+      }
+      return next;
+    });
 
   async function api(method, body) {
     const token = await globalThis.shopify.sessionToken.get();
@@ -310,7 +328,32 @@ function Extension() {
           )}
 
           <s-button onClick={newProfile}>Nieuwe boot toevoegen</s-button>
-          <s-heading>1. Basisgegevens</s-heading>
+          <s-heading>1. Wat voor boot heeft u?</s-heading>
+          <s-stack direction="inline" gap="small-200">
+            {HOOFDTYPES.map((type) => (
+              <s-button
+                key={type}
+                variant={form.boottype === type ? 'primary' : 'secondary'}
+                onClick={() => chooseType(type)}
+              >
+                {type}
+              </s-button>
+            ))}
+            <s-button
+              variant={form.boottype && !HOOFDTYPES.includes(form.boottype) ? 'primary' : 'secondary'}
+              onClick={() => chooseType(form.boottype && !HOOFDTYPES.includes(form.boottype) ? form.boottype : 'Sloep')}
+            >
+              Ander type
+            </s-button>
+          </s-stack>
+
+          {form.boottype && !HOOFDTYPES.includes(form.boottype) && (
+            <Select label="Boottype" name="boottype" update={update} options={ALLE_TYPES} />
+          )}
+
+          {form.boottype && <TypeFields type={form.boottype} update={update} />}
+
+          <s-heading>2. Basisgegevens</s-heading>
           {activeProfile?.photoUrl && (
             <s-image
               src={activeProfile.photoUrl}
@@ -335,31 +378,22 @@ function Extension() {
           <Field label="HIN / CIN nummer" name="hin_cin" update={update} />
           <Field label="Registratienummer" name="registratienummer" update={update} />
 
-          <Select label="Boottype" name="boottype" update={update} options={[
-            'Motorboot','Motorjacht','Zeiljacht','Sloep','Tender','Consoleboot','Speedboot',
-            'Sportcruiser','Kajuitboot','Visboot','RIB','Kruiser','Trawler',
-            'Kotter','Salonboot','Platbodem','Aak','Skûtsje','Vlet','Opduwer',
-            'Houseboat / woonboot','Catamaran','Trimaran','Rubberboot','Anders',
-          ]} />
+          <s-heading>3. Romp</s-heading>
+          <Select label="Materiaal romp" name="materiaal_romp" update={update} options={rompOpties(form.boottype)} />
 
-          <s-heading>2. Romp</s-heading>
-          <Select label="Materiaal romp" name="materiaal_romp" update={update} options={[
-            'Staal','Polyester','Aluminium','Hout','Carbon','Rubber','Hypalon','Anders',
-          ]} />
-
-          <s-heading>3. Afmetingen</s-heading>
+          <s-heading>4. Afmetingen</s-heading>
           <Field label="Lengte in cm" name="lengte" update={update} />
           <Field label="Breedte in cm" name="breedte" update={update} />
           <Field label="Diepgang in cm" name="diepgang" update={update} />
           <Field label="Doorvaarthoogte in cm" name="doorvaarthoogte" update={update} />
           <Field label="Waterverplaatsing in kg" name="waterverplaatsing" update={update} />
 
-          <s-heading>4. Brandstof</s-heading>
+          <s-heading>5. Brandstof</s-heading>
           <Select label="Brandstof" name="brandstof" update={update} options={[
             'Diesel','Benzine','Elektrisch','Hybride',
           ]} />
 
-          <s-heading>5. Motor</s-heading>
+          <s-heading>6. Motor</s-heading>
           <Select label="Soort motor" name="soort_motor" update={update} options={[
             'Binnenboord diesel','Binnenboord benzine','Buitenboord benzine',
             'Buitenboord elektrisch','Binnenboord elektrisch','Hybride','Anders',
@@ -383,7 +417,7 @@ function Extension() {
           <Field label="Aantal motoren" name="aantal_motoren" update={update} />
           <Field label="Totaal vermogen in pk" name="motorvermogen" update={update} />
 
-          <s-heading>6. Vaargebied & ligplaats</s-heading>
+          <s-heading>7. Vaargebied & ligplaats</s-heading>
           <Select label="Vaargebied" name="vaargebied" update={update} options={[
             'Binnenwater','Friesland','IJsselmeer','Markermeer','Randmeren',
             'Waddenzee','Delta','Zeeland','Kustwater','Noordzee','Oostzee',
@@ -398,13 +432,13 @@ function Extension() {
             'In het water','Op de wal','Binnenstalling','Buitenstalling','Geen winterstalling',
           ]} />
 
-          <s-heading>7. Navigatie</s-heading>
+          <s-heading>8. Navigatie</s-heading>
           {[
             'Plotter / kaartplotter','Radar','AIS','Marifoon','Autopilot',
             'Dieptemeter','Log / snelheidsmeter','Kompas','Fishfinder','GPS',
           ].map((item) => <Check key={item} label={item} update={update} />)}
 
-          <s-heading>8. Comfort</s-heading>
+          <s-heading>9. Comfort</s-heading>
           {[
             'Airco','Heteluchtverwarming','Vloerverwarming','Boiler','Douche',
             'Toilet elektrisch','Toilet handmatig / pomptoilet','Koelkast',
@@ -412,7 +446,7 @@ function Extension() {
             'Audio-installatie','Wifi','Bluetooth boordsysteem',
           ].map((item) => <Check key={item} label={item} update={update} />)}
 
-          <s-heading>9. Elektrisch</s-heading>
+          <s-heading>10. Elektrisch</s-heading>
           {[
             'Walstroom','Omvormer','Acculader','Zonnepanelen',
             'Scheidingstransformator','Generator',
@@ -427,14 +461,14 @@ function Extension() {
             'Coelmo','Paguro','Mastervolt','Anders / Overig',
           ]} />
 
-          <s-heading>10. Dek</s-heading>
+          <s-heading>11. Dek</s-heading>
           {[
             'Boegschroef','Hekschroef','Ankerlier','Davits','Deckwash','Trimtabs',
             'Spudpalen','Zwemplatform','Zwemtrap','Bimini','Cabriokap','Buiskap',
             'Kuiptent','Teakdek',
           ].map((item) => <Check key={item} label={item} update={update} />)}
 
-          <s-heading>11. Veiligheid</s-heading>
+          <s-heading>12. Veiligheid</s-heading>
           {[
             'Bilgepomp automatisch','Bilgepomp handmatig','Brandblussysteem','EPIRB',
             'Reddingsvlot','Reddingsvesten','Gasdetector','Koolmonoxidemelder','Rookmelder',
@@ -555,4 +589,110 @@ function Check({label, update}) {
       onChange={(event) => update(key, event.currentTarget.checked)}
     />
   );
+}
+
+const HOOFDTYPES = ['Rubberboot', 'RIB', 'Motorjacht', 'Zeiljacht', 'Speedboot'];
+
+const ALLE_TYPES = [
+  'Motorboot','Motorjacht','Zeiljacht','Sloep','Tender','Consoleboot','Speedboot',
+  'Sportcruiser','Kajuitboot','Visboot','RIB','Kruiser','Trawler',
+  'Kotter','Salonboot','Platbodem','Aak','Skûtsje','Vlet','Opduwer',
+  'Houseboat / woonboot','Catamaran','Trimaran','Rubberboot','Anders',
+];
+
+const STANDAARD = {
+  Rubberboot: {materiaal_romp: 'Rubber', soort_motor: 'Buitenboord benzine'},
+  RIB: {materiaal_romp: 'Polyester', soort_motor: 'Buitenboord benzine'},
+  Speedboot: {materiaal_romp: 'Polyester', brandstof: 'Benzine'},
+  Zeiljacht: {materiaal_romp: 'Polyester', brandstof: 'Diesel', soort_motor: 'Binnenboord diesel'},
+  Motorjacht: {brandstof: 'Diesel', soort_motor: 'Binnenboord diesel'},
+};
+
+function rompOpties(type) {
+  if (type === 'Rubberboot') return ['Rubber','PVC','Hypalon','Anders'];
+  return ['Staal','Polyester','Aluminium','Hout','Carbon','Rubber','Hypalon','Anders'];
+}
+
+const TUBE = ['PVC','Hypalon / CSM','Hypalon-Neopreen','ORCA (Hypalon)','Polyurethaan (PU)','Weet ik niet'];
+
+function TypeFields({type, update}) {
+  if (type === 'Zeiljacht' || type === 'Catamaran' || type === 'Trimaran' || type === 'Platbodem' || type === 'Skûtsje') {
+    return (
+      <s-stack gap="base">
+        <s-heading>Zeilgegevens</s-heading>
+        <Select label="Aantal masten" name="aantal_masten" update={update} options={['1','2','3 of meer']} />
+        <Field label="Masthoogte boven de waterlijn in cm" name="masthoogte" update={update} />
+        <s-text>Tip: de masthoogte boven water is ook uw doorvaarthoogte met staande mast. Wij vullen die automatisch in bij Afmetingen.</s-text>
+        <Select label="Tuigage" name="tuigage" update={update} options={[
+          'Sloep (1 mast)','Kotter','Kits','Yawl','Schoener','Catboot','Gaffeltuig','Spriettuig','Anders',
+        ]} />
+        <Select label="Kiel" name="kieltype" update={update} options={[
+          'Vaste kiel (fin)','Langkiel','Kimkiel','Kielmidzwaard','Midzwaard','Zijzwaarden','Hefkiel','Anders',
+        ]} />
+        <Select label="Mast strijkbaar" name="mast_strijkbaar" update={update} options={['Nee','Ja, staande mast strijkbaar','Ja, met mastkraan']} />
+        <Select label="Rolfok / rolgrootzeil" name="rolsysteem" update={update} options={[
+          'Geen','Rolfok','Rolfok en rolgrootzeil','Lazy bag / lazy jacks',
+        ]} />
+      </s-stack>
+    );
+  }
+  if (type === 'Rubberboot') {
+    return (
+      <s-stack gap="base">
+        <s-heading>Rubberboot</s-heading>
+        <Select label="Soort bodem" name="soort_bodem" update={update} options={[
+          'Lattenbodem','Airdeck / luchtbodem','Aluminium bodem','Houten vloer (multiplex)','Rolbodem','Weet ik niet',
+        ]} />
+        <Select label="Soort tube" name="soort_tube" update={update} options={TUBE} />
+        <Field label="Aantal luchtkamers" name="luchtkamers" update={update} />
+        <Field label="Maximaal toegestaan motorvermogen in pk" name="max_pk" update={update} />
+        <Field label="Maximaal aantal personen" name="max_personen" update={update} />
+      </s-stack>
+    );
+  }
+  if (type === 'RIB') {
+    return (
+      <s-stack gap="base">
+        <s-heading>RIB</s-heading>
+        <Select label="Bodem (romp)" name="soort_bodem" update={update} options={[
+          'Polyester V-bodem','Aluminium V-bodem','Diepe V-bodem','Weet ik niet',
+        ]} />
+        <Select label="Soort tube" name="soort_tube" update={update} options={TUBE} />
+        <Field label="Tubediameter in cm" name="tube_diameter" update={update} />
+        <Select label="Stuurconsole" name="console" update={update} options={['Middenconsole','Zijconsole','Geen (helmstok)']} />
+        <Field label="Maximaal toegestaan motorvermogen in pk" name="max_pk" update={update} />
+        <Field label="Maximaal aantal personen" name="max_personen" update={update} />
+      </s-stack>
+    );
+  }
+  if (type === 'Motorjacht' || type === 'Kruiser' || type === 'Trawler' || type === 'Sportcruiser') {
+    return (
+      <s-stack gap="base">
+        <s-heading>Motorjacht</s-heading>
+        <Select label="Rompvorm" name="rompvorm" update={update} options={[
+          'Verdringer','Halfplanerend','Planerend','Weet ik niet',
+        ]} />
+        <Select label="Stuurstand" name="stuurstand" update={update} options={[
+          'Binnenstuurstand','Buitenstuurstand','Binnen en buiten','Flybridge',
+        ]} />
+        <Field label="Aantal hutten" name="aantal_hutten" update={update} />
+        <Field label="Aantal slaapplaatsen" name="slaapplaatsen" update={update} />
+        <Field label="Inhoud brandstoftank in liters" name="tank_brandstof" update={update} />
+        <Field label="Inhoud watertank in liters" name="tank_water" update={update} />
+      </s-stack>
+    );
+  }
+  if (type === 'Speedboot' || type === 'Consoleboot') {
+    return (
+      <s-stack gap="base">
+        <s-heading>Speedboot</s-heading>
+        <Select label="Rompvorm" name="rompvorm" update={update} options={['V-bodem','Diepe V-bodem','Vlakke bodem','Catamaranbodem','Weet ik niet']} />
+        <Field label="Maximaal toegestaan motorvermogen in pk" name="max_pk" update={update} />
+        <Field label="Maximaal aantal personen" name="max_personen" update={update} />
+        <Select label="Trailer" name="trailer" update={update} options={['Geen trailer','Geremde trailer','Ongeremde trailer']} />
+        <Select label="Vaarbewijs nodig" name="vaarbewijs" update={update} options={['Weet ik niet','Ja (sneller dan 20 km/u)','Nee']} />
+      </s-stack>
+    );
+  }
+  return null;
 }

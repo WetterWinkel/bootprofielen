@@ -434,8 +434,9 @@
 
   function airDraft() {
     var saved = storageGet("ww-airdraft");
-    var raw = saved || boatField("doorvaarthoogte");
+    var raw = saved || boatField("doorvaarthoogte") || boatField("masthoogte");
     var n = parseFloat(String(raw || "").replace(",", ".").replace(/[^0-9.]/g, ""));
+    if (!saved && isFinite(n) && n >= 40 && n < 4000) n = n / 100; // bootprofiel staat in cm
     return isFinite(n) && n > 0 && n < 40 ? n : null;
   }
   function fmtM(n) { return n == null ? "?" : (Math.round(n * 100) / 100).toString().replace(".", ",") + " m"; }
@@ -1083,7 +1084,11 @@
       '<label class="ww-check"><input type="checkbox" name="mast" value="1"' + (mastMode() ? " checked" : "") + '> <span><strong>Staande mast</strong><br><span class="ww-small">Vaar via de officiële staande mastroute</span></span></label>' +
       '<button type="submit" class="ww-btn ww-btn-primary">Plan route</button></form>';
   }
-  function mastMode() { return storageGet("ww-mast") === "1"; }
+  function mastMode() {
+    var v = storageGet("ww-mast");
+    if (v === "1" || v === "0") return v === "1";
+    return !!boatField("masthoogte") && !/ja/i.test(String(boatField("mast_strijkbaar") || "")); // zeiljacht met staande mast
+  }
 
   function openRoutePanel() {
     var sheet = document.querySelector("[data-map-sheet]");
@@ -1391,6 +1396,9 @@
     var extra = [
       ["Boottype", d.boottype], ["Romp", d.materiaal_romp], ["Soort motor", d.soort_motor],
       ["Aantal motoren", d.aantal_motoren], ["Bouwjaar motor", d.bouwjaar_motor], ["Generator", d.merk_generator],
+      ["Aantal masten", d.aantal_masten], ["Masthoogte", d.masthoogte ? d.masthoogte + " cm" : ""], ["Tuigage", d.tuigage], ["Kiel", d.kieltype], ["Mast strijkbaar", d.mast_strijkbaar],
+      ["Bodem", d.soort_bodem], ["Tube", d.soort_tube], ["Tubediameter", d.tube_diameter ? d.tube_diameter + " cm" : ""], ["Luchtkamers", d.luchtkamers], ["Console", d.console],
+      ["Rompvorm", d.rompvorm], ["Stuurstand", d.stuurstand], ["Hutten", d.aantal_hutten], ["Max. vermogen", d.max_pk ? d.max_pk + " pk" : ""], ["Max. personen", d.max_personen], ["Trailer", d.trailer],
       ["Thuishaven", d.thuishaven || d.ligplaats], ["Vaargebied", d.vaargebied], ["Winterstalling", d.winterstalling]
     ].filter(function (s) { return s[1] != null && String(s[1]).trim() !== ""; });
     var sub = [d.merk_boot, d.model_boot].filter(Boolean).join(" ");
