@@ -46,6 +46,9 @@ function customerGid(value: string) {
     : `gid://shopify/Customer/${value}`;
 }
 
+// Maximaal aantal gratis vragen per uur van alle niet-ingelogde bezoekers samen.
+const ANON_HOURLY_CAP = Number(process.env.CAPTAIN_ANON_HOURLY_CAP || 120);
+
 function visitorToken(request: Request) {
   const url = new URL(request.url);
   return String(url.searchParams.get("visitor_id") || "")
@@ -577,6 +580,34 @@ export async function action({ request }: ActionFunctionArgs) {
     if (currentUsage.remaining <= 0) {
       if (access.passAvailable && (await spendPassCredit(shop, shopifyCustomerId))) usageType = "PASS";
       else if (access.creditAvailable && (await spendCredit(shop, shopifyCustomerId))) usageType = "CREDIT";
+    }
+
+    // Bescherming tegen misbruik: anonieme bezoekers kunnen hun browser-id
+    // vernieuwen. Daarom een totaalplafond voor alle anonieme gratis vragen.
+    if (isAnonymous && usageType === "FREE" && currentUsage.remaining > 0) {
+      const anonLastHour = await prisma.captainMessage.count({
+        where: {
+          role: "USER",
+          usageType: "FREE",
+          createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) },
+          conversation: { shop, customerId: { startsWith: "anon:" } },
+        },
+      });
+      if (anonLastHour >= ANON_HOURLY_CAP) {
+        console.warn(`[captain-ai] anoniem plafond bereikt (${anonLastHour}/uur)`);
+        return json(
+          {
+            success: false,
+            limitReached: true,
+            profilePrompt: true,
+            requiresProfile: true,
+            profileUrl: PROFILE_URL,
+            remaining: 0,
+            message: "Het is nu erg druk bij Captain AI. Log in en maak een gratis bootprofiel aan om direct verder te gaan, of probeer het over een uur opnieuw.",
+          },
+          429,
+        );
+      }
     }
 
     if (currentUsage.remaining <= 0 && usageType === "FREE") {
