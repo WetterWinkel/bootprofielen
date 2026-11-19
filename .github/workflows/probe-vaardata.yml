@@ -20,16 +20,16 @@ jobs:
           const tok = j.token; console.log("demo token", !!tok, j.idUser);
           console.log("enc/dec", v.decrypt(v.encrypt("hallo")) === "hallo");
           let me; try { me = await v.vrmMe(tok); console.log("me", me); } catch (e) { console.log("me fout", e.message); me = { idUser: j.idUser || 22 }; }
-          const sites = await v.vrmInstallations(tok, me.idUser); console.log("sites", sites.length, sites.slice(0, 5));
-          for (const s of sites.slice(0, 4)) {
-            try { const sn = await v.vrmSnapshot(tok, s.idSite); const { groups, ...rest } = sn; console.log("SITE", s.name, JSON.stringify(rest)); console.log("groups", groups.map(g => g.device + "(" + g.values.length + ")").join(", ")); }
-            catch (e) { console.log("snap fout", s.idSite, e.message); }
+          const site = 151734;
+          for (const path of ["/installations/151734/diagnostics?count=1000", "/installations/151734/diagnostics", "/installations/151734/system-overview", "/installations/151734/widgets/BatterySummary", "/installations/151734/widgets/Status", "/installations/151734/stats?type=live_feed", "/users/22/installations?extended=1&idSite=151734"]) {
+            const r = await fetch("https://vrmapi.victronenergy.com/v2" + path, { headers: { "X-Authorization": "Bearer " + tok } });
+            const t = await r.text(); console.log("PATH", path, r.status, t.slice(0, 1500));
           }
           const vr = await import("./vaarroute.mjs");
           const l = await vr.loadStaandeMast(); console.log("SMR lijnen", l.length, l.reduce((s, x) => s + x.coords.length, 0), "punten");
           const t0 = Date.now(); const net = await vr.buildNetwork(console.log); console.log("bouw", Date.now() - t0);
-          const air = 14;
-          for (const [a, b, n] of [[[5.80, 53.09], [5.68, 52.85], "Grou-Lemmer"], [[4.48, 51.92], [4.90, 52.38], "Rotterdam-Amsterdam"], [[5.73, 53.20], [6.56, 53.22], "Leeuwarden-Groningen"]]) {
+          const air = 16;
+          for (const [a, b, n] of [[[5.8365, 53.0935], [5.7115, 52.843], "Grou-Lemmer"], [[4.48, 51.905], [4.90, 52.383], "Rotterdam-Amsterdam"], [[5.79, 53.193], [6.55, 53.226], "Leeuwarden-Groningen"], [[4.30, 51.86], [5.43, 53.17], "Rotterdam-Harlingen"]]) {
             for (const mast of [false, true]) { const r = vr.planRoute(net, a, b, air, undefined, { mast }); console.log(n, mast ? "MAST" : "gewoon", r.ok ? Math.round(r.distanceM / 1000) + " km, smr " + Math.round(r.staandeMastM / 1000) + " km, " + r.waterways.slice(0, 8).join(" > ") : r.reason); }
           }
           X
