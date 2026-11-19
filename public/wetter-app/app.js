@@ -730,6 +730,20 @@
       Jan: "jan", Feb: "feb", Mar: "mrt", Apr: "apr", May: "mei", Jun: "jun", Jul: "jul", Aug: "aug", Sep: "sep", Oct: "okt", Nov: "nov", Dec: "dec" };
     return String(h).replace(/24\/7/g, "dag en nacht").replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su|PH|off|closed|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/g, function (m) { return map[m]; }).replace(/;\s*/g, "; ");
   }
+  // Liggeld & walstroom betalen: de gangbare systemen in Nederlandse havens.
+  function payHtml() {
+    var ios = /iPhone|iPad|iPod/i.test(navigator.userAgent), android = /Android/i.test(navigator.userAgent);
+    var store = function (iosId, q, web) { return ios && iosId ? "https://apps.apple.com/nl/app/id" + iosId : android ? "https://play.google.com/store/search?q=" + encodeURIComponent(q) + "&c=apps" : web; };
+    var apps = [
+      ["AanUit", "Stroom, water & liggeld aan de paal", store("836594386", "Ease2pay AanUit", "https://www.aanuit.net")],
+      ["Blue Water App", "Liggeld betalen en plek boeken", store("861905710", "Blue Water App", "https://www.bluewaterapp.nl")],
+      ["i-Marina", "Stroom en water via QR of NFC", ios ? "https://apps.apple.com/nl/search?term=i-Marina" : "https://play.google.com/store/search?q=i-Marina&c=apps"]
+    ];
+    return '<details class="ww-pay"><summary><strong>Liggeld & walstroom betalen</strong><span class="ww-small">Welk systeem? Kijk op het bord bij de steiger of de stroompaal.</span></summary>' +
+      '<div class="ww-list">' + apps.map(function (a) { return '<a class="ww-list-row" href="' + esc(a[2]) + '" target="_blank" rel="noopener"><span><strong>' + esc(a[0]) + '</strong><br><span class="ww-small">' + esc(a[1]) + "</span></span><span>Open ›</span></a>"; }).join("") +
+      '<div class="ww-list-row"><span><strong>Tap & Go</strong><br><span class="ww-small">Contactloos pinnen: houd je pas of telefoon tegen de lezer op de paal</span></span><span>💳</span></div></div></details>';
+  }
+
   function contactHtml(tg) {
     var rows = [], btns = [];
     var hours = tg.opening_hours || tg["seamark:harbour:opening_hours"];
@@ -809,6 +823,7 @@
       var typeNl = { restaurant: "Restaurant", cafe: "Café", pub: "Kroeg", bar: "Bar", fast_food: "Snackbar", ice_cream: "IJs" };
       sub = kind === "shop" ? (p.shop === "convenience" ? "Buurtwinkel" : "Supermarkt") : kind === "marina" ? "Jachthaven (OpenStreetMap)" : kind === "fuel" ? "Brandstof aan het water" : (typeNl[p.amenity] || "Horeca") + (p.cuisine ? " · " + p.cuisine.replace(/;/g, ", ") : "");
       extra = contactHtml(p) || '<p class="ww-small" style="margin:0">Geen openingstijden of contactgegevens bekend.</p>';
+      if (kind === "marina") extra += payHtml();
     }
     var ll = o.marker.getLatLng ? o.marker.getLatLng() : o.marker.getBounds().getCenter();
     var canFav = kind === "poi" || kind === "marina" || kind === "slipway" || kind === "ferry" || kind === "fuel" || kind === "shop" || kind === "marrekrite";
@@ -936,7 +951,7 @@
       html += '<div class="ww-list"><div class="ww-list-row"><span>Passantenplaatsen</span><span>' + (p.shortstayplaces || "onbekend") + '</span></div><div class="ww-list-row"><span>Vaste ligplaatsen</span><span>' + (p.longstayplaces || "onbekend") + '</span></div><div class="ww-list-row"><span>Brandstof</span><span>' + (p.suppliesfuel === "Yes" ? "Ja" : "Nee / onbekend") + "</span></div></div>" +
         '<div class="ww-sheet-actions"><button type="button" class="ww-btn ww-btn-primary ww-btn-sm" data-route-to="' + hl.lat.toFixed(5) + "," + hl.lng.toFixed(5) + '" data-route-label="' + esc(p.name || "Jachthaven") + '">Vaar hierheen</button>' +
         '<button type="button" class="ww-btn ww-btn-ghost ww-btn-sm" data-fav="' + hl.lat.toFixed(5) + "," + hl.lng.toFixed(5) + '" data-fav-label="' + esc(p.name || "Jachthaven") + '">' + (isFav(hl.lat, hl.lng) ? "★ Favoriet" : "☆ Bewaar") + "</button></div>" +
-        '<div data-harbour-contact><p class="ww-small" style="margin:0">Contactgegevens zoeken…</p></div>' +
+        '<div data-harbour-contact><p class="ww-small" style="margin:0">Contactgegevens zoeken…</p></div>' + payHtml() +
         '<p class="ww-small" style="margin:0;opacity:.8">Bron: Rijkswaterstaat en OpenStreetMap.</p>';
     } else {
       html += '<div data-times><p class="ww-small" style="margin:0">Bedieningstijden laden…</p></div>';

@@ -25,6 +25,6 @@ jobs:
         run: |
           npx react-router typegen
           npx tsc --noEmit 2>&1 | tee tsc.log || true
-          if grep -E "wetter-app|bootmarkt\.app|stremmingen|vaarroute" tsc.log; then
+          if grep -E "wetter-app|bootmarkt\.app|stremmingen|vaarroute|victron" tsc.log; then
             echo "Typefouten in de nieuwe app-bestanden"; exit 1
           fi
