@@ -22,10 +22,11 @@ type Edge = {
   name: string;
   objects: RouteObject[];
   blockedFor: number; // doorvaarthoogte waarboven deze vaarweg niet kan (Infinity = geen vaste brug)
+  smr: boolean; // ligt op de officiële staande mastroute
 };
 
 export type RouteObject = {
-  kind: "bridge" | "lock";
+  kind: "bridge" | "lock" | "cable";
   id: number;
   name: string;
   city: string;
@@ -110,6 +111,28 @@ function centroid(geometry: any): Coord | null {
   return [x / ring.length, y / ring.length];
 }
 
+// Officiële staande mastroute (Rijkswaterstaat, Basisrecreatietoervaartnet, CC-0).
+const SMR_URL =
+  "https://geo.rijkswaterstaat.nl/services/ogc/gdr/nwp_basisrecreatietoervaartnetwerk/ows?service=WFS&version=2.0.0&request=GetFeature&outputFormat=application/json&typeName=staande_mast_route&srsName=EPSG:4326";
+export type SmrLine = { type: string; coords: Array<[number, number]> }; // [lat, lon]
+let smrCache: { at: number; lines: SmrLine[] } | null = null;
+export async function loadStaandeMast(): Promise<SmrLine[]> {
+  if (smrCache && Date.now() - smrCache.at < 24 * 3600000) return smrCache.lines;
+  const d: any = await getJson(SMR_URL);
+  const lines: SmrLine[] = [];
+  for (const f of d.features || []) {
+    const g = f.geometry || {};
+    const parts: Coord[][] = g.type === "LineString" ? [g.coordinates] : g.type === "MultiLineString" ? g.coordinates : [];
+    const type = String(f.properties?.type || "").trim() || "Staande Mast Route";
+    for (const part of parts) {
+      if (part.length < 2) continue;
+      lines.push({ type, coords: part.map((c) => [Number(c[1].toFixed(5)), Number(c[0].toFixed(5))] as [number, number]) });
+    }
+  }
+  if (lines.length) smrCache = { at: Date.now(), lines };
+  return lines;
+}
+
 async function loadNwb() {
   const features: any[] = [];
   let url: string | null = NWB_URL;
@@ -148,11 +171,13 @@ function nearestSegment(net: Network, p: Coord, maxMeters: number) {
 
 export async function buildNetwork(log: (msg: string) => void = () => {}): Promise<Network> {
   const started = Date.now();
-  const [nwb, bruggen, openingen, sluizen] = await Promise.all([
+  const [nwb, bruggen, openingen, sluizen, kabels, smrLines] = await Promise.all([
     loadNwb(),
     getJson(`${FIS_WFS}&typeName=brug&count=20000`).then((d) => d.features || []),
     getJson(`${FIS_WFS}&typeName=opening&count=20000`).then((d) => d.features || []),
     getJson(`${FIS_WFS}&typeName=sluis_v&count=5000`).then((d) => d.features || []),
+    getJson(`${FIS_WFS}&typeName=bovengrondse_kabel&count=5000`).then((d) => d.features || []).catch(() => []),
+    loadStaandeMast().catch(() => [] as SmrLine[]),
   ]);
   log(`data geladen: ${nwb.length} vaarwegvakken, ${bruggen.length} bruggen, ${openingen.length} openingen, ${sluizen.length} sluizen in ${Date.now() - started} ms`);
 
@@ -175,6 +200,7 @@ export async function buildNetwork(log: (msg: string) => void = () => {}): Promi
       name: String(p.vwg_naam || p.vrt_naam || ""),
       objects: [],
       blockedFor: Infinity,
+      smr: false,
     };
     const index = edges.push(edge) - 1;
     for (const node of [edge.a, edge.b]) {
@@ -228,6 +254,53 @@ export async function buildNetwork(log: (msg: string) => void = () => {}): Promi
     return true;
   };
   for (const f of bruggen) if (attach("bridge", f, 35)) matchedBridges++;
+  // Hoogspanningskabels boven het water: ook een maximale doorvaarthoogte.
+  let matchedCables = 0;
+  for (const f of kabels) {
+    const p = f.properties || {};
+    const h = typeof p.clearanceheight === "number" ? p.clearanceheight : typeof p.height === "number" ? p.height : null;
+    const c = centroid(f.geometry);
+    if (h == null || !c) continue;
+    const hit = nearestSegment(net, c, 60);
+    if (!hit) continue;
+    const e = edges[hit.edge];
+    const pos = e.cum[hit.seg] + (e.cum[hit.seg + 1] - e.cum[hit.seg]) * hit.t;
+    e.objects.push({ kind: "cable", id: Number(p.id), name: String(p.name || "Hoogspanningskabel"), city: "", canOpen: false, clearance: h, pos, edge: hit.edge, lat: c[1], lon: c[0] });
+    e.blockedFor = Math.min(e.blockedFor, h);
+    matchedCables++;
+  }
+  // Vaarwegvakken op de officiële staande mastroute markeren.
+  let smrEdges = 0;
+  if (smrLines.length) {
+    const SC = 0.005;
+    const smrGrid = new Set<string>();
+    for (const l of smrLines) {
+      for (let i = 0; i < l.coords.length; i++) {
+        const a = l.coords[i], b = l.coords[i + 1] || a;
+        const steps = Math.max(1, Math.ceil(dist([a[1], a[0]], [b[1], b[0]]) / 100));
+        for (let k = 0; k <= steps; k++) {
+          const la = a[0] + ((b[0] - a[0]) * k) / steps, lo = a[1] + ((b[1] - a[1]) * k) / steps;
+          smrGrid.add(`${Math.round(lo / SC)}:${Math.round(la / SC)}`);
+        }
+      }
+    }
+    const near = (c: Coord) => {
+      const x = Math.round(c[0] / SC), y = Math.round(c[1] / SC);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (smrGrid.has(`${x + dx}:${y + dy}`)) return true;
+      return false;
+    };
+    for (const e of edges) {
+      const n = Math.max(2, Math.min(12, Math.round(e.len / 250)));
+      let hits = 0;
+      for (let k = 0; k <= n; k++) {
+        const pos = (e.len * k) / n;
+        let i = 0;
+        while (i < e.cum.length - 2 && e.cum[i + 1] < pos) i++;
+        if (near(e.coords[i])) hits++;
+      }
+      if (hits / (n + 1) >= 0.6) { e.smr = true; smrEdges++; }
+    }
+  }
   for (const f of sluizen) if (attach("lock", f, 80)) matchedLocks++;
   for (const e of edges) e.objects.sort((x, y) => x.pos - y.pos);
 
@@ -238,6 +311,8 @@ export async function buildNetwork(log: (msg: string) => void = () => {}): Promi
     bridgesOnNetwork: matchedBridges,
     locks: sluizen.length,
     locksOnNetwork: matchedLocks,
+    cablesOnNetwork: matchedCables,
+    staandeMastEdges: smrEdges,
     buildMs: Date.now() - started,
   };
   log(`netwerk klaar: ${JSON.stringify(net.stats)}`);
@@ -308,9 +383,17 @@ export type RouteResult =
       waterways: string[];
       snapFromM: number;
       snapToM: number;
+      staandeMastM?: number;
     };
 
-export function planRoute(net: Network, from: Coord, to: Coord, airDraft: number | null, avoid?: Set<number>): RouteResult {
+export function planRoute(
+  net: Network,
+  from: Coord,
+  to: Coord,
+  airDraft: number | null,
+  avoid?: Set<number>,
+  opts: { mast?: boolean } = {},
+): RouteResult {
   const margin = 0.1;
   const s = nearestSegment(net, from, 15000);
   const t = nearestSegment(net, to, 15000);
@@ -326,7 +409,7 @@ export function planRoute(net: Network, from: Coord, to: Coord, airDraft: number
   const blockedBetween = (e: Edge, a: number, b: number) => {
     if (airDraft == null) return false;
     const lo = Math.min(a, b), hi = Math.max(a, b);
-    return e.objects.some((o) => o.kind === "bridge" && !o.canOpen && o.clearance != null && o.clearance < airDraft + margin && o.pos >= lo && o.pos <= hi);
+    return e.objects.some((o) => o.kind !== "lock" && !o.canOpen && o.clearance != null && o.clearance < airDraft + margin && o.pos >= lo && o.pos <= hi);
   };
 
   // Zelfde vaarwegvak en vrij pad: direct.
@@ -371,25 +454,26 @@ export function planRoute(net: Network, from: Coord, to: Coord, airDraft: number
         const e = net.edges[ei];
         if (!passable(e, ei)) continue;
         const other = e.a === node ? e.b : e.a;
-        relax(other, e.len, ei);
+        // Met staande mast: de officiële staande mastroute sterk voorrang geven.
+        relax(other, opts.mast && !e.smr ? e.len * 3 : e.len, ei);
       }
     }
     if (!prev.has(END)) {
       if (airDraft != null) {
         // Zonder hoogtebeperking rekenen om te laten zien welke brug het probleem is.
-        const free = planRoute(net, from, to, null, avoid);
+        const free = planRoute(net, from, to, null, avoid, opts);
         if (free.ok) {
           const reached = (e: Edge) => distMap.has(e.a) || distMap.has(e.b);
           const all = free.objects.filter(
-            (o) => o.kind === "bridge" && !o.canOpen && o.clearance != null && o.clearance < airDraft + margin,
+            (o) => o.kind !== "lock" && !o.canOpen && o.clearance != null && o.clearance < airDraft + margin,
           );
           // Alleen bruggen op de grens van wat wél bereikbaar is.
           const edge = all.filter((o) => reached(net.edges[o.edge]));
           const blockers = edge.length ? edge : all;
-          const names = blockers.slice(0, 3).map((o) => `${o.name || "brug"} (${String(o.clearance).replace(".", ",")} m)`);
+          const names = blockers.slice(0, 3).map((o) => `${o.name || (o.kind === "cable" ? "kabel" : "brug")} (${String(o.clearance).replace(".", ",")} m)`);
           return {
             ok: false,
-            reason: `Je bestemming is niet bereikbaar met een doorvaarthoogte van ${String(airDraft).replace(".", ",")} m. Te lage vaste brug: ${names.join(", ") || "onbekend"}. Kies een bestemming ervoor, bijvoorbeeld een haven aan de rand.`,
+            reason: `Je bestemming is niet bereikbaar met een doorvaarthoogte van ${String(airDraft).replace(".", ",")} m. Te lage vaste brug of kabel: ${names.join(", ") || "onbekend"}. Kies een bestemming ervoor, bijvoorbeeld een haven aan de rand.`,
             blockers: blockers.map((o) => ({ name: o.name, clearance: o.clearance, lat: o.lat, lon: o.lon })),
           } as any;
         }
@@ -453,7 +537,8 @@ export function planRoute(net: Network, from: Coord, to: Coord, airDraft: number
     seen.add(key);
     return true;
   });
-  return { ok: true, distanceM: travelled, coords, objects: unique, waterways, snapFromM: s.d, snapToM: t.d };
+  const smrM = steps.reduce((sum, st) => sum + (net.edges[st.edge].smr ? Math.abs(st.to - st.from) : 0), 0);
+  return { ok: true, distanceM: travelled, coords, objects: unique, waterways, snapFromM: s.d, snapToM: t.d, staandeMastM: Math.round(smrM) };
 }
 
 // Eén netwerk per serverproces, lui geladen en elke 24 uur ververst.

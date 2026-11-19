@@ -271,6 +271,7 @@
       '<input id="ww-home-q" type="text" enterkeyhint="send" maxlength="1500" placeholder="Bijv. welke impeller past op mijn motor?" autocomplete="off">' +
       '<button type="submit" class="ww-send ww-send-amber" aria-label="Verstuur">' + ICON.send + "</button></div></form></section>";
 
+    if (!vic.data && !vic.loading && Date.now() - (vic.at || 0) > 20000) loadVictron(false);
     var boatsLabel = boats.length > 1 ? "Uw boten" : "Uw boot";
     var boatSub = boat ? boat.name + (boats.length > 1 ? " +" + (boats.length - 1) : "") : "Maak je bootprofiel";
     var w = ui.weather && ui.weather.current;
@@ -278,6 +279,7 @@
       { href: "#vaarinfo", icon: "wind", title: "Actuele vaarinformatie", sub: w ? Math.round(w.wind_speed_10m) + " kn · " + beaufort(w.wind_speed_10m) + " Bft " + windDir(w.wind_direction_10m) : "Wind, weer, bruggen & sluizen", big: true },
       { href: "#kaart", icon: "pin", title: "Vaarkaart", sub: "Bruggen, sluizen & jachthavens" },
       { href: "#boot", icon: "boat", title: boatsLabel, sub: boatSub },
+      { href: "#boot", icon: "bolt", title: "Energie aan boord", sub: vic.data && vic.data.snapshot && vic.data.snapshot.battery.soc != null ? "Accu " + Math.round(vic.data.snapshot.battery.soc) + "%" + (vic.data.snapshot.solar && vic.data.snapshot.solar.power ? " · zon " + fmtW(vic.data.snapshot.solar.power) : "") : vic.data && vic.data.connected === false ? "Koppel je Victron" : "Victron" },
       { href: "#shop", icon: "bag", title: "Shoppen", sub: "30.000+ artikelen" },
       { href: "/apps/bootmarkt", icon: "market", title: "Bootmarkt", sub: "Boten kopen & verkopen" },
       { href: "#service", icon: "book", title: "Serviceboek", sub: (S.entries || []).length ? (S.entries.length + " registraties") : "Onderhoud bijhouden" },
@@ -501,6 +503,7 @@
         L.popup().setLatLng(ev.latlng).setContent('<button type="button" class="ww-btn ww-btn-primary ww-btn-sm" data-route-here>Vaar hierheen</button>').openOn(map);
       });
       loadMapData();
+      drawMastroute();
       loadStremmingen(function () {
         drawStremmingen();
         if (ui.pendingNotice && strem.byId[ui.pendingNotice]) {
@@ -522,6 +525,7 @@
     ["strem", "Stremmingen", true],
     ["hinder", "Hinder & beperkingen", true],
     ["berichten", "Overige scheepvaartberichten", false],
+    ["mast", "Staande mastroute", false],
     ["bruggen", "Bruggen & sluizen", true],
     ["havens", "Jachthavens", true],
     ["kabels", "Hoogspanning & kabels", true],
@@ -641,6 +645,37 @@
       return { n: n, d: Math.sqrt(dx * dx + dy * dy) };
     }).filter(function (x) { return x.d <= km && x.n.cat !== "info"; })
       .sort(function (a, b) { return (a.n.status === "nu" ? 0 : 1) - (b.n.status === "nu" ? 0 : 1) || (a.n.cat === "stremming" ? 0 : 1) - (b.n.cat === "stremming" ? 0 : 1) || a.d - b.d; });
+  }
+
+  // ---------- Staande mastroute (Rijkswaterstaat, heel Nederland) ----------
+  var smr = { lines: null, layer: null, loading: false };
+  function drawMastroute() {
+    if (!map) return;
+    if (smr.layer) { map.removeLayer(smr.layer); smr.layer = null; }
+    if (!layerOn("mast")) return;
+    if (!smr.lines) {
+      if (smr.loading) return;
+      smr.loading = true;
+      fetch(S.appPath + "/mastroute", { credentials: "same-origin", headers: { Accept: "application/json" } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { smr.loading = false; if (d && d.success) { smr.lines = d.lines; drawMastroute(); } })
+        .catch(function () { smr.loading = false; toast("Staande mastroute laden lukt nu niet."); });
+      return;
+    }
+    smr.layer = L.layerGroup().addTo(map);
+    smr.lines.forEach(function (l) {
+      var alt = /alternatie/i.test(l.type);
+      L.polyline(l.coords, { color: "#7C3AED", weight: 9, opacity: 0.28, dashArray: alt ? "10 10" : null, renderer: lineRenderer || undefined, pane: "ww-lines" })
+        .on("click", function (ev) {
+          var sheet = document.querySelector("[data-map-sheet]");
+          if (!sheet) return;
+          sheet.innerHTML = '<div class="ww-sheet-map-head"><div><strong>' + esc(alt ? l.type : "Staande mastroute") + '</strong><span class="ww-small">Route voor zeilboten met staande mast</span></div>' +
+            '<button type="button" class="ww-link" data-close-map-sheet aria-label="Sluiten" style="font-size:22px;min-width:44px;min-height:44px">×</button></div>' +
+            '<p class="ww-small" style="margin:0">Op deze route zijn alle bruggen beweegbaar of hoog genoeg. Let op bedieningstijden; veel bruggen draaien in konvooi of alleen buiten de spits.</p>' +
+            '<p class="ww-small" style="margin:0;opacity:.8">Bron: Rijkswaterstaat, Basisrecreatietoervaartnet.</p>';
+          sheet.hidden = false;
+        }).addTo(smr.layer);
+    });
   }
 
   function loadPois() {
@@ -1030,8 +1065,10 @@
       '<div class="ww-geo-results" data-geo-results>' + favs().slice(0, 6).map(function (f, i) { return '<button type="button" class="ww-geo-item" data-fav-pick="' + i + '">★ ' + esc(f.label) + "</button>"; }).join("") + "</div>" +
       '<div class="ww-row2"><label class="ww-field">Snelheid (knopen)<input type="text" inputmode="decimal" name="speed" value="' + esc(String(speedKn()).replace(".", ",")) + '"></label>' +
       '<label class="ww-field">Doorvaarthoogte<input type="text" inputmode="decimal" name="air" value="' + esc(airDraft() ? String(airDraft()).replace(".", ",") : "") + '" placeholder="m"></label></div>' +
+      '<label class="ww-check"><input type="checkbox" name="mast" value="1"' + (mastMode() ? " checked" : "") + '> <span><strong>Staande mast</strong><br><span class="ww-small">Vaar via de officiële staande mastroute</span></span></label>' +
       '<button type="submit" class="ww-btn ww-btn-primary">Plan route</button></form>';
   }
+  function mastMode() { return storageGet("ww-mast") === "1"; }
 
   function openRoutePanel() {
     var sheet = document.querySelector("[data-map-sheet]");
@@ -1086,7 +1123,7 @@
     if (!route.to) { toast("Kies een bestemming"); openRoutePanel(); return; }
     var sheet = document.querySelector("[data-map-sheet]");
     if (sheet) { sheet.hidden = false; sheet.innerHTML = '<p class="ww-small" style="margin:0">' + (attempt ? "Routeplanner wordt voorbereid… (eerste keer even geduld)" : "Route berekenen…") + "</p>"; }
-    var url = S.appPath + "/route?from=" + from.lat.toFixed(5) + "," + from.lon.toFixed(5) + "&to=" + route.to.lat.toFixed(5) + "," + route.to.lon.toFixed(5) + (airDraft() ? "&air=" + airDraft() : "");
+    var url = S.appPath + "/route?from=" + from.lat.toFixed(5) + "," + from.lon.toFixed(5) + "&to=" + route.to.lat.toFixed(5) + "," + route.to.lon.toFixed(5) + (airDraft() ? "&air=" + airDraft() : "") + (mastMode() ? "&mast=1" : "");
     fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } })
       .then(function (r) { return r.json(); })
       .then(function (d) {
@@ -1144,6 +1181,7 @@
       eta.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }) + "</strong><span>aankomst</span></div></div>" +
       '<p class="ww-small" style="margin:0">' + opens.length + " brug" + (opens.length === 1 ? "" : "gen") + " moet" + (opens.length === 1 ? "" : "en") + " open · " + locks.length + " slui" + (locks.length === 1 ? "s" : "zen") + " · " + under.length + (under.length === 1 ? " brug" : " bruggen") + " waar je onderdoor past" +
       (r.air ? "" : ' · <button type="button" class="ww-link" data-airdraft>doorvaarthoogte instellen</button>') + "</p>" +
+      (r.mast ? '<p class="ww-small" style="margin:0">⛵ Staande mast: ' + (r.distanceM ? Math.round(100 * (r.staandeMastM || 0) / r.distanceM) : 0) + "% van de route over de officiële staande mastroute." + (r.distanceM && (r.staandeMastM || 0) / r.distanceM < 0.8 ? " Controleer de rest op vaste bruggen." : "") + "</p>" : "") +
       (r.blockedOnRoute && r.blockedOnRoute.length ? '<div class="ww-notice" style="background:#FEF2F2;border-color:#FCA5A5;color:#991B1B"><strong>Let op: deze route is nu gestremd</strong> bij ' + esc(r.blockedOnRoute.join(", ")) + ". Er is geen omweg gevonden. Bekijk het bericht hieronder of bel de bediening.</div>" :
         r.detourFor && r.detourFor.length ? '<div class="ww-notice" style="background:#EFF6FF;border-color:#93C5FD;color:#1E3A8A">Route vaart om een stremming heen: ' + esc(r.detourFor.join(", ")) + ".</div>" : "") +
       '<button type="button" class="ww-btn ww-btn-primary" data-nav-start>Start navigatie</button>' +
@@ -1246,6 +1284,74 @@
       "</div>";
   }
 
+  // ---------- Victron (VRM) ----------
+  var vic = { data: null, loading: false, error: "", busy: false, showAll: false };
+  function loadVictron(fresh) {
+    if (vic.loading) return;
+    vic.loading = true; vic.error = "";
+    fetch(S.appPath + "/victron" + (fresh ? "?fresh=1" : ""), { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { vic.loading = false; vic.at = Date.now(); if (d && d.success) vic.data = d; else { vic.error = (d && d.message) || "Victron is nu niet bereikbaar."; if (d && d.connected === false) vic.data = d; else if (!vic.data) vic.data = { connected: true }; } if (ui.tab === "boot" || ui.tab === "home") render(); })
+      .catch(function () { vic.loading = false; vic.error = "Victron is nu niet bereikbaar."; if (ui.tab === "boot") render(); });
+  }
+  function victronPost(body) {
+    vic.busy = true; render();
+    return fetch(S.appPath + "/victron", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { vic.busy = false; if (d.success) { vic.data = d; vic.error = ""; vic.at = Date.now(); } else vic.error = d.message || "Dat lukte niet."; if (d.message) toast(d.message); render(); })
+      .catch(function () { vic.busy = false; vic.error = "Dat lukte niet. Probeer het opnieuw."; render(); });
+  }
+  function fmtW(w) { return w == null ? "–" : Math.abs(w) >= 1000 ? (w / 1000).toFixed(1).replace(".", ",") + " kW" : Math.round(w) + " W"; }
+  function fmtNum(n, dec, unit) { return n == null ? "–" : n.toFixed(dec).replace(".", ",") + " " + unit; }
+  function fmtTtg(sec) { if (sec == null || sec <= 0) return "–"; var h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60); return h > 99 ? "> 99 uur" : h + " u " + m + " m"; }
+  function victronSection() {
+    if (!vic.data && !vic.loading && Date.now() - (vic.at || 0) > 20000) loadVictron(false);
+    var d = vic.data;
+    var head = '<h2 style="display:flex;align-items:center;gap:8px"><span style="color:#0877BD">' + ICON.bolt.replace('width="26" height="26"', 'width="20" height="20"') + "</span>Energie aan boord · Victron</h2>";
+    if (!d) return '<section class="ww-section">' + head + '<p class="ww-small">Victron laden…</p></section>';
+    if (!d.connected) {
+      return '<section class="ww-section">' + head + '<div class="ww-card" style="padding:16px;display:grid;gap:10px">' +
+        '<p style="margin:0">Zie je accu, zonnepanelen, walstroom en tanks direct in de app. Werkt met elke Victron-installatie die naar VRM stuurt (Cerbo GX, Venus, GX Touch).</p>' +
+        '<ol class="ww-small" style="margin:0;padding-left:18px;display:grid;gap:4px"><li>Open <a href="https://vrm.victronenergy.com/access-tokens" target="_blank" rel="noopener">VRM ›</a> en log in.</li><li>Ga naar Voorkeuren → Integraties → Toegangstokens en maak een nieuw token aan (bijv. "WetterWinkel").</li><li>Kopieer het token en plak het hieronder.</li></ol>' +
+        '<form data-victron-form style="display:grid;gap:8px"><label class="ww-field">VRM-toegangstoken<input type="password" name="token" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Plak hier je token"></label>' +
+        '<button type="submit" class="ww-btn ww-btn-primary"' + (vic.busy ? " disabled" : "") + ">" + (vic.busy ? "Koppelen…" : "Koppel Victron") + "</button></form>" +
+        (vic.error ? '<p class="ww-small" style="color:#B91C1C;margin:0">' + esc(vic.error) + "</p>" : "") +
+        '<p class="ww-small" style="margin:0;opacity:.8">We vragen nooit je VRM-wachtwoord. Het token wordt versleuteld bewaard en je kunt het altijd intrekken in VRM.</p></div></section>';
+    }
+    var sn = d.snapshot, b = sn && sn.battery || {};
+    var sites = d.sites || [];
+    var siteSel = sites.length > 1 ? '<select class="ww-select" data-victron-site>' + sites.map(function (x) { return '<option value="' + x.idSite + '"' + (x.idSite === d.siteId ? " selected" : "") + ">" + esc(x.name) + "</option>"; }).join("") + "</select>" : (sites[0] ? '<span class="ww-small">' + esc(sites[0].name) + "</span>" : "");
+    if (!sn) return '<section class="ww-section">' + head + siteSel + '<p class="ww-small">' + esc(vic.error || (sites.length ? "Nog geen gegevens van deze installatie." : "Geen installaties gevonden in je VRM-account.")) + '</p><button type="button" class="ww-btn ww-btn-ghost ww-btn-sm" data-victron-off>Ontkoppelen</button></section>';
+    var soc = b.soc, socColor = soc == null ? "#94A3B8" : soc < 30 ? "#DC2626" : soc < 50 ? "#EA8A00" : "#16A34A";
+    var charging = b.current != null ? (b.current > 0.3 ? "Laden" : b.current < -0.3 ? "Ontladen" : "Rust") : "";
+    var age = sn.updatedAt ? Math.round((Date.now() - Date.parse(sn.updatedAt)) / 60000) : null;
+    var tiles = [
+      ["Spanning", fmtNum(b.voltage, 2, "V")], ["Stroom", fmtNum(b.current, 1, "A")], ["Vermogen", fmtW(b.power)],
+      ["Resttijd", charging === "Ontladen" ? fmtTtg(b.timeToGo) : "–"],
+      ["Zonne-energie", fmtW(sn.solar && sn.solar.power) + (sn.solar && sn.solar.yieldTodayKwh ? " · " + sn.solar.yieldTodayKwh.toFixed(1).replace(".", ",") + " kWh vandaag" : "")],
+      ["Walstroom", sn.shore && sn.shore.connected === false ? "Niet aangesloten" : fmtW(sn.shore && sn.shore.power)]
+    ];
+    if (sn.consumption != null) tiles.push(["Verbruik", fmtW(sn.consumption)]);
+    if (b.temperature != null) tiles.push(["Accutemp.", fmtNum(b.temperature, 0, "°C")]);
+    var html = '<section class="ww-section">' + head + siteSel +
+      '<div class="ww-card ww-vic"><div class="ww-vic-soc"><div class="ww-vic-ring" style="--p:' + (soc == null ? 0 : Math.max(0, Math.min(100, soc))) + ";--c:" + socColor + '"><span>' + (soc == null ? "–" : Math.round(soc) + "%") + '</span></div><div><strong>Accu</strong><span class="ww-small">' + esc(charging) + (age != null ? " · " + (age < 2 ? "zojuist" : age < 60 ? age + " min geleden" : Math.round(age / 60) + " uur geleden") : "") + "</span></div>" +
+      '<button type="button" class="ww-link" data-victron-refresh aria-label="Vernieuwen" style="margin-left:auto;min-width:44px;min-height:44px">' + (vic.loading ? "…" : "↻") + "</button></div>" +
+      '<div class="ww-specs">' + tiles.map(function (t) { return '<div class="ww-spec"><span class="ww-small">' + esc(t[0]) + "</span><span>" + esc(t[1]) + "</span></div>"; }).join("") + "</div>" +
+      ((sn.tanks || []).length ? '<div style="display:grid;gap:8px">' + sn.tanks.map(function (t) {
+        return '<div><div class="ww-small" style="display:flex;justify-content:space-between"><span>' + esc(t.name) + "</span><span>" + Math.round(t.level) + '%</span></div><div class="ww-bar"><i style="width:' + Math.max(0, Math.min(100, t.level)) + '%"></i></div></div>';
+      }).join("") + "</div>" : "") +
+      ((sn.alarms || []).length ? '<div class="ww-notice" style="background:#FEF2F2;border-color:#FCA5A5;color:#991B1B">' + sn.alarms.map(esc).join("<br>") + "</div>" : "") +
+      (vic.error ? '<p class="ww-small" style="color:#B91C1C;margin:0">' + esc(vic.error) + "</p>" : "") +
+      "</div>";
+    html += '<button type="button" class="ww-link" data-victron-all style="margin-top:4px">' + (vic.showAll ? "Verberg alle waarden" : "Alle waarden ›") + "</button>";
+    if (vic.showAll) html += (sn.groups || []).map(function (g) {
+      return '<h3 class="ww-small" style="margin:10px 0 4px;font-weight:700">' + esc(g.device) + '</h3><div class="ww-list">' + g.values.map(function (v) { return '<div class="ww-list-row"><span>' + esc(v.label) + "</span><span>" + esc(v.value) + "</span></div>"; }).join("") + "</div>";
+    }).join("");
+    html += '<button type="button" class="ww-btn ww-btn-ghost ww-btn-sm" data-victron-off style="margin-top:8px">Victron ontkoppelen</button>' +
+      '<p class="ww-small" style="margin:0;opacity:.8">Gegevens via Victron VRM.</p></section>';
+    return html;
+  }
+
   function boatScreen() {
     var boats = S.boats || [];
     var add = '<a class="ww-btn ww-btn-sm" style="background:rgba(255,255,255,.12);color:#fff" href="' + esc(S.profileUrl) + '">+ Boot</a>';
@@ -1253,7 +1359,7 @@
       return header("Je boot", "", add) +
         '<section class="ww-section"><div class="ww-empty"><strong style="color:#10202E">Nog geen bootprofiel</strong>' +
         "Maak gratis een bootprofiel aan. Dan weet de app welke onderdelen passen, kent Captain AI je boot en houd je je onderhoud bij." +
-        '<a class="ww-btn ww-btn-primary" href="' + esc(S.profileUrl) + '">Bootprofiel maken</a></div></section>';
+        '<a class="ww-btn ww-btn-primary" href="' + esc(S.profileUrl) + '">Bootprofiel maken</a></div></section>' + victronSection();
     }
     var boat = currentBoat() || boats[0];
     var d = boat.data || {};
@@ -1284,6 +1390,7 @@
       (extra.length ? '<section class="ww-section"><h2>Details</h2><div class="ww-list">' + extra.map(function (s) {
         return '<div class="ww-list-row"><span>' + esc(s[0]) + "</span><span>" + esc(s[1]) + "</span></div>";
       }).join("") + "</div></section>" : "") +
+      victronSection() +
       '<section class="ww-section"><a class="ww-btn ww-btn-primary" href="#shop">Shop onderdelen voor ' + esc(boat.name) + "</a>" +
       '<a class="ww-btn ww-btn-ghost" href="' + esc(S.profileUrl) + '">Bootprofiel bewerken</a></section>';
   }
@@ -1370,7 +1477,7 @@
     var head = header("Serviceboek", boat ? boat.name + (engineLabel() ? " · " + engineLabel() : "") : "", add);
     if (!boat) {
       return head + '<section class="ww-section"><div class="ww-empty">Je serviceboek hoort bij je boot. Maak eerst een bootprofiel aan.' +
-        '<a class="ww-btn ww-btn-primary" href="' + esc(S.profileUrl) + '">Bootprofiel maken</a></div></section>';
+        '<a class="ww-btn ww-btn-primary" href="' + esc(S.profileUrl) + '">Bootprofiel maken</a></div></section>' + victronSection();
     }
     var entries = S.entries || [];
     var planned = entries.filter(function (e) { return e.status === "PLANNED"; })
@@ -1600,6 +1707,12 @@
     if (t.hasAttribute("data-route-open")) { e.preventDefault(); openRoutePanel(); return; }
     if (t.hasAttribute("data-route-here")) { if (map) map.closePopup(); planRoute(); return; }
     if (t.hasAttribute("data-route-clear")) { clearRoute(); var rs = document.querySelector("[data-map-sheet]"); if (rs) rs.hidden = true; return; }
+    if (t.hasAttribute("data-victron-refresh")) { loadVictron(true); render(); return; }
+    if (t.hasAttribute("data-victron-all")) { vic.showAll = !vic.showAll; render(); return; }
+    if (t.hasAttribute("data-victron-off")) {
+      if (window.confirm("Victron ontkoppelen? Trek het token daarna ook in VRM in.")) victronPost({ intent: "disconnect" });
+      return;
+    }
     if (t.hasAttribute("data-notice")) {
       var nid = t.getAttribute("data-notice");
       var nn = strem.byId[nid] || (route.data && (route.data.notices || []).filter(function (x) { return x.id === nid; })[0]);
@@ -1687,10 +1800,11 @@
   });
 
   root.addEventListener("change", function (e) {
+    if (e.target && e.target.hasAttribute && e.target.hasAttribute("data-victron-site")) { victronPost({ intent: "site", siteId: Number(e.target.value) }); return; }
     var el = e.target;
     if (el && el.hasAttribute && el.hasAttribute("data-layer")) {
       setLayer(el.getAttribute("data-layer"), el.checked);
-      if (map && mapLayers) { mapLayers.clearLayers(); mapObjects = {}; lastPoiKey = ""; loadMapData(); drawStremmingen(); }
+      if (map && mapLayers) { mapLayers.clearLayers(); mapObjects = {}; lastPoiKey = ""; loadMapData(); drawStremmingen(); drawMastroute(); }
     }
   });
 
@@ -1727,6 +1841,13 @@
       setTimeout(function () { askCaptain(question); }, 30);
       return;
     }
+    if (form.hasAttribute("data-victron-form")) {
+      e.preventDefault();
+      var tok = String(new FormData(form).get("token") || "").trim();
+      if (!tok) { toast("Plak eerst je VRM-toegangstoken."); return; }
+      victronPost({ intent: "connect", token: tok });
+      return;
+    }
     if (form.hasAttribute("data-route-form")) {
       e.preventDefault();
       var fd = new FormData(form);
@@ -1734,6 +1855,8 @@
       if (isFinite(sp) && sp > 0 && sp < 60) storageSet("ww-speed", String(sp));
       var adv = parseFloat(String(fd.get("air") || "").replace(",", "."));
       if (isFinite(adv) && adv > 0 && adv < 40) storageSet("ww-airdraft", String(adv));
+      storageSet("ww-mast", fd.get("mast") ? "1" : "0");
+      if (fd.get("mast") && !layerOn("mast")) { setLayer("mast", true); drawMastroute(); }
       if (!String(fd.get("from") || "").trim()) route.from = null;
       refreshBridgeColors();
       planRoute();

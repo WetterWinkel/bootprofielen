@@ -275,3 +275,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ww-strem-info { background: #2563EB; font-style: italic; font-family: Georgia, serif; }
 .ww-strem-planned { opacity: .55; }
 .ww-strem-mini { display: inline-flex; width: 13px; height: 13px; font-size: 9px; border-width: 1px; margin-right: 5px; vertical-align: -2px; box-shadow: none; }
+.ww-check { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid #DCE6F0; border-radius: 12px; background: #F7FAFD; font-size: 14px; }
+.ww-check input { width: 20px; height: 20px; margin-top: 2px; accent-color: #0877BD; }
+.ww-vic { padding: 16px; display: grid; gap: 14px; }
+.ww-vic-soc { display: flex; align-items: center; gap: 14px; }
+.ww-vic-soc strong { display: block; font-size: 17px; }
+.ww-vic-ring { --p: 0; --c: #16A34A; width: 76px; height: 76px; border-radius: 50%; background: conic-gradient(var(--c) calc(var(--p) * 1%), #E5ECF3 0); display: grid; place-items: center; flex: none; }
+.ww-vic-ring span { width: 60px; height: 60px; border-radius: 50%; background: #fff; display: grid; place-items: center; font: 800 18px/1 system-ui, sans-serif; color: #10202E; }
+.ww-bar { height: 8px; border-radius: 99px; background: #E5ECF3; overflow: hidden; }
+.ww-bar i { display: block; height: 100%; background: #0877BD; border-radius: 99px; }
+.ww-select { width: 100%; min-height: 44px; border: 1px solid #DCE6F0; border-radius: 12px; padding: 0 12px; font-size: 16px; background: #fff; margin-bottom: 8px; }

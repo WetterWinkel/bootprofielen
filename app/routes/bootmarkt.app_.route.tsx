@@ -83,10 +83,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const blocking = blockingPoints().filter((b) => b.typeCode !== "LKB");
     const avoidMap = blockedEdges(net, blocking.map((b) => ({ lat: b.lat, lon: b.lon, codes: b.limitCodes, name: b.name })), air);
     const avoid = new Set(avoidMap.keys());
-    let result = planRoute(net, from, to, air, avoid);
+    const mast = url.searchParams.get("mast") === "1";
+    const opts = { mast };
+    let result = planRoute(net, from, to, air, avoid, opts);
     let blockedOnRoute: string[] = [];
     let detourFor: string[] = [];
-    const direct = avoid.size ? planRoute(net, from, to, air) : result;
+    const direct = avoid.size ? planRoute(net, from, to, air, undefined, opts) : result;
     if (!result.ok && direct.ok) {
       // Geen omweg mogelijk: toon de normale route met een duidelijke waarschuwing.
       result = direct;
@@ -102,7 +104,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       route: {
         distanceM: Math.round(result.distanceM),
         coords: result.coords.map(([lat, lon]) => [Number(lat.toFixed(5)), Number(lon.toFixed(5))]),
-        objects: result.objects.map((o) => ({
+        objects: result.objects.filter((o) => o.kind !== "cable").map((o) => ({
           kind: o.kind,
           id: o.id,
           name: o.name,
@@ -118,6 +120,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
         snapFromM: Math.round(result.snapFromM),
         snapToM: Math.round(result.snapToM),
         air,
+        mast,
+        staandeMastM: result.staandeMastM ?? 0,
         blockedOnRoute,
         detourFor,
         notices: notices.map((n) => ({
