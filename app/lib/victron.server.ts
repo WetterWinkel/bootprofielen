@@ -159,13 +159,21 @@ export async function vrmSnapshot(token: string, idSite: number) {
   const ttg = pick(recs, /battery/, ["/TimeToGo"], [/time to go/i]);
   const temp = pick(recs, /battery/, ["/Dc/0/Temperature"], [/battery temperature/i]);
   // Zonne-energie: alle laadregelaars bij elkaar.
-  console.log("[victron-debug]", JSON.stringify(recs.filter((x) => /solarcharger/.test(String(x.dbusServiceType || ""))).slice(0, 8).map((x) => [x.dbusPath, x.description, x.rawValue])));
-  const pvRecs = recs.filter((x) => /solarcharger/.test(String(x.dbusServiceType || "")) && x.dbusPath === "/Yield/Power");
-  let pv: number | null = pvRecs.length ? pvRecs.reduce((s, r) => s + (num(r.rawValue) || 0), 0) : null;
+  const pvByInstance = new Map<string, number>();
+  for (const r of recs) {
+    if (!/solarcharger/.test(String(r.dbusServiceType || ""))) continue;
+    const isPower = r.dbusPath === "/Yield/Power" || r.dbusPath === "/Dc/0/Power" || /^(pv power|battery watts)$/i.test(String(r.description || ""));
+    const n = num(r.rawValue);
+    const key = `${r.Device}:${r.instance}`;
+    if (isPower && n != null && !pvByInstance.has(key)) pvByInstance.set(key, n);
+  }
+  let pv: number | null = pvByInstance.size ? [...pvByInstance.values()].reduce((a, b) => a + b, 0) : null;
   if (pv == null) pv = val(pick(recs, /system/, ["/Dc/Pv/Power"], [/^pv - dc-coupled$/i, /pv power/i]));
+  const yieldSeen = new Set<string>();
   const yieldToday = recs
-    .filter((x) => /solarcharger/.test(String(x.dbusServiceType || "")) && /^\/History\/Daily\/0\/Yield$/.test(String(x.dbusPath || "")))
-    .reduce((s, r) => s + (num(r.rawValue) || 0), 0);
+    .filter((x) => /solarcharger/.test(String(x.dbusServiceType || "")) && (x.dbusPath === "/History/Daily/0/Yield" || /^yield today$/i.test(String(x.description || ""))))
+    .filter((x) => { const k = `${x.Device}:${x.instance}`; if (yieldSeen.has(k)) return false; yieldSeen.add(k); return true; })
+    .reduce((sum, r) => sum + (num(r.rawValue) || 0), 0);
   const shore = pick(recs, /vebus|acsystem|system/, ["/Ac/ActiveIn/L1/P", "/Ac/Grid/L1/Power", "/Ac/ActiveIn/P"], [/input power 1/i, /grid l1/i]);
   const shoreConnected = pick(recs, /vebus/, ["/Ac/ActiveIn/Connected"], [/ac input connected/i]);
   const consumption = pick(recs, /system/, ["/Ac/Consumption/L1/Power", "/Dc/System/Power"], [/ac consumption l1/i, /dc system/i]);

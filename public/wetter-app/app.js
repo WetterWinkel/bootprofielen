@@ -1303,7 +1303,7 @@
   }
   function fmtW(w) { return w == null ? "–" : Math.abs(w) >= 1000 ? (w / 1000).toFixed(1).replace(".", ",") + " kW" : Math.round(w) + " W"; }
   function fmtNum(n, dec, unit) { return n == null ? "–" : n.toFixed(dec).replace(".", ",") + " " + unit; }
-  function fmtTtg(sec) { if (sec == null || sec <= 0) return "–"; var h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60); return h > 99 ? "> 99 uur" : h + " u " + m + " m"; }
+  function fmtTtg(hours) { if (hours == null || hours <= 0) return "–"; var h = Math.floor(hours), m = Math.round((hours - h) * 60); return h > 99 ? "> 99 uur" : h + " u " + m + " m"; }
   function victronSection() {
     if (!vic.data && !vic.loading && Date.now() - (vic.at || 0) > 20000) loadVictron(false);
     var d = vic.data;
