@@ -161,7 +161,7 @@ export async function vrmSnapshot(token: string, idSite: number) {
   // Zonne-energie: alle laadregelaars bij elkaar.
   const pvByInstance = new Map<string, number>();
   for (const r of recs) {
-    if (!/solarcharger/.test(String(r.dbusServiceType || ""))) continue;
+    if (!/solarcharger/.test(String(r.dbusServiceType || "")) && !/solar|mppt/i.test(String(r.Device || ""))) continue;
     const isPower = r.dbusPath === "/Yield/Power" || r.dbusPath === "/Dc/0/Power" || /^(pv power|battery watts)$/i.test(String(r.description || ""));
     const n = num(r.rawValue);
     const key = `${r.Device}:${r.instance}`;
@@ -171,7 +171,7 @@ export async function vrmSnapshot(token: string, idSite: number) {
   if (pv == null) pv = val(pick(recs, /system/, ["/Dc/Pv/Power"], [/^pv - dc-coupled$/i, /pv power/i]));
   const yieldSeen = new Set<string>();
   const yieldToday = recs
-    .filter((x) => /solarcharger/.test(String(x.dbusServiceType || "")) && (x.dbusPath === "/History/Daily/0/Yield" || /^yield today$/i.test(String(x.description || ""))))
+    .filter((x) => (/solarcharger/.test(String(x.dbusServiceType || "")) || /solar|mppt/i.test(String(x.Device || ""))) && (x.dbusPath === "/History/Daily/0/Yield" || /^yield today$/i.test(String(x.description || ""))))
     .filter((x) => { const k = `${x.Device}:${x.instance}`; if (yieldSeen.has(k)) return false; yieldSeen.add(k); return true; })
     .reduce((sum, r) => sum + (num(r.rawValue) || 0), 0);
   const shore = pick(recs, /vebus|acsystem|system/, ["/Ac/ActiveIn/L1/P", "/Ac/Grid/L1/Power", "/Ac/ActiveIn/P"], [/input power 1/i, /grid l1/i]);
