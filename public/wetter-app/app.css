@@ -292,3 +292,4 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ww-pay[open] summary strong::after { content: " ⌄"; }
 .ww-pay .ww-list { margin: 0 8px 8px; }
 .ww-pay a.ww-list-row { color: inherit; text-decoration: none; }
+.ww-strem { color: #fff !important; line-height: 1 !important; text-align: center; }

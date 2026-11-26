@@ -380,8 +380,8 @@
         '<div class="ww-wind-side"><div class="ww-wind-temp">' + Math.round(c.temperature_2m) + "°</div><div>" + esc(WMO[c.weather_code] || "") + "</div></div></div>" +
         '<div class="ww-specs ww-specs-white">' +
         '<div class="ww-spec"><span class="ww-small">Neerslag nu</span><span>' + (c.precipitation || 0).toString().replace(".", ",") + " mm</span></div>" + marine +
-        (ui.weather.daily ? '<div class="ww-spec"><span class="ww-small">Zon op / onder</span><span>' + esc(String(ui.weather.daily.sunrise[0]).slice(11)) + " – " + esc(String(ui.weather.daily.sunset[0]).slice(11)) + "</span></div>" : "") +
-        "</div></section>";
+        (ui.weather.daily ? '<div class="ww-spec"><span class="ww-small">Zon op / onder</span><span>' + esc(String(ui.weather.daily.sunrise[0]).slice(11, 16)) + " – " + esc(String(ui.weather.daily.sunset[0]).slice(11, 16)) + "</span></div>" : "") +
+        "</div>" + (ui.weather.source ? '<p class="ww-small" style="margin:6px 0 0;opacity:.7">Weerdata: ' + esc(ui.weather.source) + "</p>" : "") + "</section>";
 
       var h = ui.weather.hourly;
       if (h && h.time) {
@@ -411,7 +411,7 @@
         (!strem.items ? '<p class="ww-small">Scheepvaartberichten laden…</p>' : !near.length ? '<p class="ww-small">Geen stremmingen of hinder binnen 25 km. Goede vaart!</p>' :
         '<div class="ww-list">' + near.map(function (x) {
           var n = x.n, st = STREM_STYLE[n.cat];
-          return '<button type="button" class="ww-list-row ww-route-obj" data-notice="' + esc(n.id) + '"><span><span class="ww-strem ww-strem-' + n.cat + (n.status !== "nu" ? " ww-strem-planned" : "") + '" style="width:18px;height:18px;font-size:12px;display:inline-flex;vertical-align:-3px;margin-right:6px">' + st.sym + "</span>" + esc(n.name || "Bericht") +
+          return '<button type="button" class="ww-list-row ww-route-obj" data-notice="' + esc(n.id) + '"><span><span class="ww-strem ww-strem-' + n.cat + (n.status !== "nu" ? " ww-strem-planned" : "") + '" style="width:20px;height:20px;font-size:13px;display:inline-flex;vertical-align:-4px;margin-right:8px">' + st.sym + "</span>" + esc(n.name || "Bericht") +
             '<br><span class="ww-small">' + esc(n.status === "nu" ? (n.limits[0] || st.label) : "Gepland: " + n.when) + " · " + x.d.toFixed(0) + " km</span></span><span>›</span></button>";
         }).join("") + "</div>") +
         '<p class="ww-small" style="margin:0">Bron: Rijkswaterstaat, berichten aan de scheepvaart. Elk uur ververst.</p></section>';
@@ -1210,7 +1210,7 @@
     if (nts.length) {
       html += '<p class="ww-small" style="margin:0"><strong>Scheepvaartberichten op je route</strong></p><div class="ww-list">' + nts.map(function (n) {
         var st = STREM_STYLE[n.cat];
-        return '<button type="button" class="ww-list-row ww-route-obj" data-notice="' + esc(n.id) + '"><span><span class="ww-strem ww-strem-' + n.cat + (n.status !== "nu" ? " ww-strem-planned" : "") + '" style="width:18px;height:18px;font-size:12px;display:inline-flex;vertical-align:-3px;margin-right:6px">' + st.sym + "</span>km " + (n.atM / 1000).toFixed(1).replace(".", ",") + " · " + esc(n.name || "Bericht") + "</span><span>" +
+        return '<button type="button" class="ww-list-row ww-route-obj" data-notice="' + esc(n.id) + '"><span><span class="ww-strem ww-strem-' + n.cat + (n.status !== "nu" ? " ww-strem-planned" : "") + '" style="width:20px;height:20px;font-size:13px;display:inline-flex;vertical-align:-4px;margin-right:8px">' + st.sym + "</span>km " + (n.atM / 1000).toFixed(1).replace(".", ",") + " · " + esc(n.name || "Bericht") + "</span><span>" +
           esc(n.status === "nu" ? (n.limits[0] || st.label) : "Gepland") + " ›</span></button>";
       }).join("") + "</div>";
     }

@@ -1,0 +1,16 @@
+name: Probe weer (tijdelijk)
+on:
+  push:
+    branches: [app]
+    paths: [".github/workflows/probe-vaardata.yml"]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: |
+          mkdir /tmp/t && cd /tmp/t && npm i -s typescript@5 >/dev/null
+          node -e 'const ts=require("typescript"),fs=require("fs");let s=fs.readFileSync(process.env.GITHUB_WORKSPACE+"/app/routes/bootmarkt.app_.weer.tsx","utf8").replace(/^import .*$/mg,"")+"\nexport {metNorway};";fs.writeFileSync("w.mjs",ts.transpileModule(s,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText)'
+          node -e 'import("./w.mjs").then(async m=>{const w=await m.metNorway(52.9525,5.9291);console.log("CUR",JSON.stringify(w.current));console.log("H",w.hourly.time.slice(0,3),w.hourly.wind_speed_10m.slice(0,3).map(Math.round),w.hourly.precipitation_probability.slice(0,3));console.log("D",JSON.stringify(w.daily))}).catch(e=>{console.log("FOUT",e.message);process.exit(1)})'
