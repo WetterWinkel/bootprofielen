@@ -19,6 +19,8 @@ const KEEP = [
   "name", "amenity", "shop", "leisure", "waterway", "cuisine", "opening_hours", "phone", "contact:phone", "contact:mobile",
   "email", "contact:email", "website", "contact:website", "url", "vhf", "seamark:radio_station:channel", "communication:vhf",
   "addr:street", "addr:housenumber", "addr:city", "brand",
+  "mooring", "fee", "charge", "maxstay", "capacity", "power_supply", "drinking_water", "toilets", "shower",
+  "description", "seamark:type", "boat", "seamark:mooring:category",
 ];
 
 async function overpass(query: string) {
@@ -93,7 +95,7 @@ async function marrekrite() {
 }
 
 async function tile(tx: number, ty: number) {
-  const key = `t:${tx}:${ty}`;
+  const key = `t2:${tx}:${ty}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < DAY) return hit.value;
   const s = (ty * TILE).toFixed(3), w = (tx * TILE).toFixed(3), n = ((ty + 1) * TILE).toFixed(3), e = ((tx + 1) * TILE).toFixed(3);
@@ -104,6 +106,12 @@ async function tile(tx: number, ty: number) {
     `nwr["shop"~"^(supermarket|convenience)$"](${b});` +
     `nwr["leisure"="marina"](${b});` +
     `nwr["waterway"="fuel"](${b});` +
+    // Aanlegplekken, hellingen en water/vuilwater voor boten (NL, BE, DE — OpenStreetMap).
+    `nwr["mooring"]["mooring"!~"^(no|private|commercial|ferry|cargo|waiting)$"](${b});` +
+    `nwr["seamark:type"="mooring"](${b});` +
+    `nwr["leisure"="slipway"](${b});` +
+    `nwr["amenity"~"^(water_point|sanitary_dump_station)$"](${b});` +
+    `nwr["waterway"~"^(water_point|sanitary_dump_station)$"](${b});` +
     `);out center tags;`;
   const value = (await overpass(q)).map(compact).filter(Boolean);
   cache.set(key, { at: Date.now(), value });

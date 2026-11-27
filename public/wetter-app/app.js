@@ -470,7 +470,7 @@
       '<div class="ww-nav-bar" data-nav-bar hidden></div>' +
       '<div id="ww-map" class="ww-map" role="application" aria-label="Vaarkaart"></div>' +
       '<div class="ww-map-tools"><button type="button" class="ww-map-btn ww-follow-btn' + (following ? " is-on" : "") + '" data-follow aria-pressed="' + following + '">' + ICON.pin + '<span data-follow-label>' + (following ? "Volgen" : "Vrij") + "</span></button></div>" +
-      '<div class="ww-map-legend"><span><i style="background:#16A34A"></i>Past eronder</span><span><i style="background:#EA8A00"></i>Moet open</span><span><i style="background:#DC2626"></i>Past niet</span><span><i style="background:#7C3AED"></i>Sluis</span><span><i style="background:#07345C"></i>Jachthaven</span><span><i style="background:#B45309"></i>Horeca</span><span><i style="background:#DB2777"></i>Supermarkt</span><span><i style="background:#0891B2"></i>Marrekrite</span><span><b class="ww-strem ww-strem-stremming ww-strem-mini">×</b>Gestremd</span><span><b class="ww-strem ww-strem-hinder ww-strem-mini">!</b>Hinder</span></div>' +
+      '<div class="ww-map-legend"><span><i style="background:#16A34A"></i>Past eronder</span><span><i style="background:#EA8A00"></i>Moet open</span><span><i style="background:#DC2626"></i>Past niet</span><span><i style="background:#7C3AED"></i>Sluis</span><span><i style="background:#07345C"></i>Jachthaven</span><span><i style="background:#B45309"></i>Horeca</span><span><i style="background:#DB2777"></i>Supermarkt</span><span><i style="background:#0891B2"></i>Aanlegplek</span><span><b class="ww-strem ww-strem-stremming ww-strem-mini">×</b>Gestremd</span><span><b class="ww-strem ww-strem-hinder ww-strem-mini">!</b>Hinder</span></div>' +
       '<div class="ww-map-hint" data-map-hint>Zoom in om bruggen en sluizen te zien</div>' +
       '<div class="ww-sheet-map" data-map-sheet hidden></div></div>';
   }
@@ -538,8 +538,11 @@
     ["veer", "Veerponten", true],
     ["helling", "Trailerhellingen", true],
     ["meldpunt", "Marifoon-meldpunten", false],
+    ["aanleg", "Aanlegplekken (NL/BE/DE)", true],
+    ["service", "Drinkwater & vuilwater", false],
     ["horeca", "Restaurants & cafés", true],
     ["super", "Supermarkten", true],
+    ["waterkant", "Eten & winkels alleen bij aanlegplek", true],
     ["marrekrite", "Marrekrite-ligplaatsen", true]
   ];
   function layerOn(key) {
@@ -682,8 +685,28 @@
     });
   }
 
+  // Aanlegpunten waar je je boot kunt laten liggen (voor "in handbereik van het water").
+  function berthPoints() {
+    var pts = [];
+    Object.keys(mapObjects).forEach(function (k) {
+      var o = mapObjects[k];
+      if (o.kind !== "harbour" && o.kind !== "marina" && o.kind !== "mooring" && o.kind !== "marrekrite") return;
+      var ll = o.marker.getLatLng ? o.marker.getLatLng() : null;
+      if (ll) pts.push({ lat: ll.lat, lon: ll.lng, name: (o.props && (o.props.name || o.props.naam)) || (o.kind === "marrekrite" ? "Marrekrite-ligplaats" : o.kind === "mooring" ? "Aanlegplaats" : "Jachthaven") });
+    });
+    return pts;
+  }
+  function nearestBerth(lat, lon, pts) {
+    var best = null;
+    for (var i = 0; i < pts.length; i++) {
+      var dy = (pts[i].lat - lat) * 111320, dx = (pts[i].lon - lon) * 111320 * Math.cos(lat * Math.PI / 180);
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d <= 600 && (!best || d < best.m)) best = { name: pts[i].name, m: Math.round(d) };
+    }
+    return best;
+  }
   function loadPois() {
-    if (!map || map.getZoom() < 13 || (!layerOn("horeca") && !layerOn("super") && !layerOn("havens"))) return;
+    if (!map || map.getZoom() < 13 || (!layerOn("horeca") && !layerOn("super") && !layerOn("havens") && !layerOn("aanleg") && !layerOn("service") && !layerOn("helling"))) return;
     var b = map.getBounds();
     var bbox = [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()].map(function (n) { return n.toFixed(3); }).join(",");
     if (bbox === lastPoiKey) return;
@@ -692,18 +715,38 @@
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d || !d.success) return;
+        var later = [];
+        var near = function (kinds, it, deg) {
+          return Object.keys(mapObjects).some(function (k) {
+            var o = mapObjects[k]; if (kinds.indexOf(o.kind) < 0 || !o.marker.getLatLng) return false;
+            var ll = o.marker.getLatLng(); return Math.abs(ll.lat - it.lat) < deg && Math.abs(ll.lng - it.lon) < deg * 1.6;
+          });
+        };
+        // Eerst de aanlegplekken, dan horeca/winkels (die kijken naar de dichtstbijzijnde aanlegplek).
         (d.items || []).forEach(function (it) {
           var tg = it.tags || {};
-          var kind = tg.leisure === "marina" ? "marina" : tg.waterway === "fuel" ? "fuel" : tg.shop ? "shop" : "poi";
+          var kind = tg.leisure === "marina" ? "marina" : tg.waterway === "fuel" ? "fuel" : tg.leisure === "slipway" ? "oslip" :
+            (tg.mooring || tg["seamark:type"] === "mooring") ? "mooring" :
+            /water_point|sanitary_dump_station/.test((tg.amenity || "") + (tg.waterway || "")) ? "service" : tg.shop ? "shop" : "poi";
+          if (kind === "poi" || kind === "shop") { later.push([kind, it, tg]); return; }
+          if ((kind === "marina" || kind === "fuel") && !layerOn("havens")) return;
+          if (kind === "mooring" && !layerOn("aanleg")) return;
+          if (kind === "service" && !layerOn("service")) return;
+          if (kind === "oslip" && (!layerOn("helling") || near(["slipway"], it, 0.0015))) return;
+          if (kind === "marina" && near(["harbour"], it, 0.002)) return;
+          if (kind === "mooring" && near(["marrekrite", "harbour"], it, 0.0006)) return;
+          var color = { marina: "#07345C", fuel: "#0F766E", oslip: "#6D28D9", mooring: "#0891B2", service: "#2563EB" }[kind];
+          addPoint(kind, it.id, [it.lat, it.lon], tg, color, kind === "marina" ? 8 : 6);
+        });
+        var pts = berthPoints();
+        later.forEach(function (x) {
+          var kind = x[0], it = x[1], tg = x[2];
           if (kind === "poi" && !layerOn("horeca")) return;
           if (kind === "shop" && !layerOn("super")) return;
-          if ((kind === "marina" || kind === "fuel") && !layerOn("havens")) return;
-          if (kind === "marina" && Object.keys(mapObjects).some(function (k) {
-            var o = mapObjects[k]; if (o.kind !== "harbour") return false;
-            var ll = o.marker.getLatLng(); return Math.abs(ll.lat - it.lat) < 0.002 && Math.abs(ll.lng - it.lon) < 0.003;
-          })) return;
-          var color = kind === "poi" ? "#B45309" : kind === "shop" ? "#DB2777" : kind === "fuel" ? "#0F766E" : "#07345C";
-          addPoint(kind, it.id, [it.lat, it.lon], tg, color, kind === "marina" ? 8 : 6);
+          var berth = nearestBerth(it.lat, it.lon, pts);
+          if (layerOn("waterkant") && !berth) return;
+          var props = Object.assign({}, tg, berth ? { _berth: berth.name, _berthM: berth.m } : {});
+          addPoint(kind, it.id, [it.lat, it.lon], props, kind === "poi" ? "#B45309" : "#DB2777", berth ? 7 : 5);
         });
       })
       .catch(function () { /* kaartinformatie tijdelijk niet bereikbaar */ });
@@ -822,21 +865,34 @@
       sub = "Marifoon-meldpunt";
       var ch2 = []; try { ch2 = JSON.parse(p.vhfchannels || "[]"); } catch (e) { ch2 = []; }
       if (ch2.length) rows.push(["Marifoonkanaal", ch2.join(" / ")]);
+    } else if (kind === "mooring" || kind === "oslip" || kind === "service") {
+      title = p.name || (kind === "mooring" ? "Aanlegplaats" : kind === "oslip" ? "Trailerhelling" : /dump/.test((p.amenity || "") + (p.waterway || "")) ? "Vuilwater afpompen" : "Drinkwaterpunt");
+      sub = kind === "mooring" ? (p.mooring === "guest" || p.mooring === "visitor" ? "Passantenplaats" : "Aanlegplaats") : kind === "oslip" ? "Trailerhelling" : "Voorziening voor boten";
+      var yes = function (v) { return v === "yes" ? "Ja" : v === "no" ? "Nee" : v; };
+      if (p.fee) rows.push(["Kosten", p.fee === "no" ? "Gratis" : p.fee === "yes" ? (p.charge || "Betaald") : p.fee]);
+      if (p.maxstay) rows.push(["Max. verblijf", p.maxstay.replace("days", "dagen").replace("day", "dag").replace("hours", "uur")]);
+      if (p.capacity) rows.push(["Plaatsen", p.capacity]);
+      if (p.power_supply) rows.push(["Walstroom", yes(p.power_supply)]);
+      if (p.drinking_water) rows.push(["Drinkwater", yes(p.drinking_water)]);
+      if (p.toilets) rows.push(["Toilet", yes(p.toilets)]);
+      if (p.description) rows.push(["Info", p.description]);
+      extra = contactHtml(p) || "";
     } else if (kind === "poi" || kind === "marina" || kind === "fuel" || kind === "shop") {
       title = p.name || p.brand || (kind === "marina" ? "Jachthaven" : kind === "fuel" ? "Tankstation (water)" : kind === "shop" ? "Supermarkt" : "Horeca");
       var typeNl = { restaurant: "Restaurant", cafe: "Café", pub: "Kroeg", bar: "Bar", fast_food: "Snackbar", ice_cream: "IJs" };
       sub = kind === "shop" ? (p.shop === "convenience" ? "Buurtwinkel" : "Supermarkt") : kind === "marina" ? "Jachthaven (OpenStreetMap)" : kind === "fuel" ? "Brandstof aan het water" : (typeNl[p.amenity] || "Horeca") + (p.cuisine ? " · " + p.cuisine.replace(/;/g, ", ") : "");
       extra = contactHtml(p) || '<p class="ww-small" style="margin:0">Geen openingstijden of contactgegevens bekend.</p>';
+      if (p._berth) extra = '<div class="ww-verdict" style="border-color:#0891B2"><span style="background:#0891B2"></span>⚓ Aanleggen: ' + esc(p._berth) + " · " + p._berthM + " m lopen</div>" + extra;
       if (kind === "marina") extra += payHtml();
     }
     var ll = o.marker.getLatLng ? o.marker.getLatLng() : o.marker.getBounds().getCenter();
-    var canFav = kind === "poi" || kind === "marina" || kind === "slipway" || kind === "ferry" || kind === "fuel" || kind === "shop" || kind === "marrekrite";
+    var canFav = kind === "poi" || kind === "marina" || kind === "slipway" || kind === "oslip" || kind === "mooring" || kind === "ferry" || kind === "fuel" || kind === "shop" || kind === "marrekrite";
     sheet.innerHTML = '<div class="ww-sheet-map-head"><div><strong>' + esc(title) + '</strong><span class="ww-small">' + esc(sub) + "</span></div>" +
       '<button type="button" class="ww-link" data-close-map-sheet aria-label="Sluiten" style="font-size:22px;min-width:44px;min-height:44px">×</button></div>' + extra +
       (rows.length ? '<div class="ww-list">' + rows.map(function (r) { return '<div class="ww-list-row"><span>' + esc(r[0]) + "</span><span>" + esc(r[1]) + "</span></div>"; }).join("") + "</div>" : "") +
       '<div class="ww-sheet-actions"><button type="button" class="ww-btn ww-btn-primary ww-btn-sm" data-route-to="' + ll.lat.toFixed(5) + "," + ll.lng.toFixed(5) + '" data-route-label="' + esc(title) + '">Vaar hierheen</button>' +
       (canFav ? '<button type="button" class="ww-btn ww-btn-ghost ww-btn-sm" data-fav="' + ll.lat.toFixed(5) + "," + ll.lng.toFixed(5) + '" data-fav-label="' + esc(title) + '">' + (isFav(ll.lat, ll.lng) ? "★ Favoriet" : "☆ Bewaar") + "</button>" : "") + "</div>" +
-      '<p class="ww-small" style="margin:0;opacity:.8">Bron: ' + (kind === "poi" || kind === "marina" || kind === "fuel" || kind === "shop" ? "OpenStreetMap" : kind === "marrekrite" ? "Provincie Fryslân / Marrekrite" : "Rijkswaterstaat") + ". Controleer ter plaatse.</p>";
+      '<p class="ww-small" style="margin:0;opacity:.8">Bron: ' + (kind === "poi" || kind === "marina" || kind === "fuel" || kind === "shop" || kind === "mooring" || kind === "oslip" || kind === "service" ? "© OpenStreetMap-bijdragers" : kind === "marrekrite" ? "Provincie Fryslân / Marrekrite" : "Rijkswaterstaat") + ". Controleer ter plaatse.</p>";
     sheet.hidden = false;
   }
 
