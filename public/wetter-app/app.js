@@ -274,39 +274,47 @@
       : '<div class="ww-login-row"><a class="ww-btn ww-btn-primary" href="/account/login?return_url=' + encodeURIComponent(S.appPath) + '">Inloggen</a></div>';
     var cart = '<a class="ww-icon-btn ww-icon-btn-light" href="/cart" aria-label="Winkelwagen">' + ICON.bag +
       '<span class="ww-badge" data-cart-badge' + (ui.cartCount ? "" : " hidden") + ">" + ui.cartCount + "</span></a>";
-    var head = '<header class="ww-home-head"><div class="ww-home-top"><span style="width:44px"></span>' +
-      '<img class="ww-logo" src="' + LOGO_URL + '" alt="WetterWinkel – voor maximaal watersportplezier" width="600" height="300">' + cart + "</div>" + login + "</header>";
-
-    var captain = '<section class="ww-section"><form class="ww-captain-hero" data-home-ask>' +
-      '<div class="ww-captain-hero-top"><span class="ww-avatar">' + ICON.captain + '</span><div><strong>Ahoy' + (S.firstName ? " " + esc(S.firstName) : "") +
-      '! Ik ben Captain AI.</strong><span>Waarmee kunnen we je helpen?</span></div></div>' +
-      '<div class="ww-composer-row"><label class="sr-only" for="ww-home-q">Vraag het Captain AI</label>' +
-      '<input id="ww-home-q" type="text" enterkeyhint="send" maxlength="1500" placeholder="Bijv. welke impeller past op mijn motor?" autocomplete="off">' +
-      '<button type="submit" class="ww-send ww-send-amber" aria-label="Verstuur">' + ICON.send + "</button></div></form></section>";
-
     if (!vic.data && !vic.loading && Date.now() - (vic.at || 0) > 20000) loadVictron(false);
-    var boatsLabel = boats.length > 1 ? "Uw boten" : "Uw boot";
     var boatSub = boat ? boat.name + (boats.length > 1 ? " +" + (boats.length - 1) : "") : "Maak je bootprofiel";
+    var hour = new Date().getHours();
+    var greet = hour < 6 ? "Goedenacht" : hour < 12 ? "Goedemorgen" : hour < 18 ? "Goedemiddag" : "Goedenavond";
+    ensureWeather();
+    var days = vaarDays(), today = days[0];
     var w = ui.weather && ui.weather.current;
-    var tiles = [
-      { href: "#vaarinfo", icon: "wind", title: "Actuele vaarinformatie", sub: w ? Math.round(w.wind_speed_10m) + " kn · " + beaufort(w.wind_speed_10m) + " Bft " + windDir(w.wind_direction_10m) : "Wind, weer, bruggen & sluizen", big: true },
-      { href: "#kaart", icon: "pin", title: "Vaarkaart", sub: "Bruggen, sluizen & jachthavens" },
-      { href: "#boot", icon: "boat", title: boatsLabel, sub: boatSub },
-      { href: "#boot", icon: "bolt", title: "Energie aan boord", sub: vic.data && vic.data.snapshot && vic.data.snapshot.battery.soc != null ? "Accu " + Math.round(vic.data.snapshot.battery.soc) + "%" + (vic.data.snapshot.solar && vic.data.snapshot.solar.power ? " · zon " + fmtW(vic.data.snapshot.solar.power) : "") : vic.data && vic.data.connected === false ? "Koppel je Victron" : "Victron" },
-      { href: "#shop", icon: "bag", title: "Shoppen", sub: "30.000+ artikelen" },
-      { href: "/apps/bootmarkt", icon: "market", title: "Bootmarkt", sub: "Boten kopen & verkopen" },
-      { href: "#service", icon: "book", title: "Serviceboek", sub: (S.entries || []).length ? (S.entries.length + " registraties") : "Onderhoud bijhouden" },
-      { href: "/account", icon: "box", title: "Bestellingen", sub: "Status & facturen" },
-      { href: "#captain", icon: "chat", title: "Captain AI", sub: "Je AI-schipper" }
-    ];
-    var grid = '<section class="ww-section"><div class="ww-tiles">' + tiles.map(function (t) {
-      return '<a class="ww-tile' + (t.big ? " ww-tile-big" : "") + '" href="' + esc(t.href) + '"><span class="ww-tile-icon">' + (ICON[t.icon] || "") + "</span>" +
-        '<span class="ww-tile-title">' + esc(t.title) + '</span><span class="ww-tile-sub">' + esc(t.sub) + "</span></a>";
-    }).join("") + "</div></section>";
+    var scoreBlock = today
+      ? '<a class="ww-hero-score" href="#vaarinfo"><span class="ww-ring ' + scoreClass(today.v.score) + '" style="--p:' + today.v.score * 10 + '"><b>' + today.v.score + "</b></span>" +
+        '<span class="ww-hero-score-text"><strong>' + esc(today.v.verdict) + "</strong><span>Vaarcijfer vandaag" + (w ? ", " + beaufort(w.wind_speed_10m) + " Bft " + windDir(w.wind_direction_10m) + ", " + Math.round(w.temperature_2m) + "°" : "") + "</span></span>" + ICON.back.replace("<svg", '<svg class="ww-chev"') + "</a>"
+      : '<a class="ww-hero-score" href="#vaarinfo"><span class="ww-ring is-empty"><b>–</b></span><span class="ww-hero-score-text"><strong>Vaarcijfer</strong><span>' + (ui.weatherLoading ? "Weer laden…" : "Bekijk het vaarweer bij jou") + "</span></span></a>";
+    var head = '<header class="ww-hero"><div class="ww-hero-top"><img class="ww-hero-mark" src="' + esc(S.iconUrl || "") + '" alt="" width="36" height="36"><span class="ww-hero-brand">WetterWinkel</span>' + cart.replace("ww-icon-btn ww-icon-btn-light", "ww-icon-btn") + "</div>" +
+      "<h1>" + greet + (S.firstName ? ", " + esc(S.firstName) : "") + "</h1>" +
+      (boat ? '<p class="ww-hero-boat">' + esc(boat.name) + (boatField("boottype") ? ", " + esc(String(boatField("boottype")).toLowerCase()) : "") + (boatField("thuishaven") ? " in " + esc(boatField("thuishaven")) : "") + "</p>" : "") +
+      scoreBlock +
+      '<form class="ww-hero-ask" data-home-ask><label class="sr-only" for="ww-home-q">Vraag het Captain AI</label>' + ICON.captain +
+      '<input id="ww-home-q" type="text" enterkeyhint="send" maxlength="1500" placeholder="Vraag Captain AI, bijv. welke impeller past?" autocomplete="off">' +
+      '<button type="submit" aria-label="Verstuur">' + ICON.send + "</button></form></header>";
 
     var hh = homeHaven();
-    var homeBtn = hh ? '<section class="ww-section" style="padding-top:0"><button type="button" class="ww-btn ww-btn-primary ww-go-home" data-go-home>🏠 Navigeer naar thuishaven<span class="ww-small">' + esc(hh.label) + "</span></button></section>" : "";
-    return head + installHint() + captain + homeBtn + grid;
+    var row = function (href, icon, title, sub, attrs) {
+      return (href ? '<a class="ww-row" href="' + esc(href) + '"' : '<button type="button" class="ww-row"' + (attrs || "")) + '><span class="ww-row-icon">' + (ICON[icon] || "") + '</span><span class="ww-row-text"><strong>' + esc(title) + "</strong>" + (sub ? "<span>" + esc(sub) + "</span>" : "") + "</span>" +
+        ICON.back.replace("<svg", '<svg class="ww-chev"') + (href ? "</a>" : "</button>");
+    };
+    var soc = vic.data && vic.data.snapshot && vic.data.snapshot.battery.soc;
+    var aanBoord = '<section class="ww-group"><h2>Aan boord</h2><div class="ww-rows">' +
+      (hh ? row("", "home", "Naar thuishaven", hh.label, " data-go-home") : "") +
+      row("#kaart", "pin", "Vaarkaart en route", "Bruggen, sluizen, havens en stremmingen") +
+      row("#vaarinfo", "wind", "Vaarweer en stremmingen", w ? beaufort(w.wind_speed_10m) + " Bft, " + esc(WMO[w.weather_code] || "").toLowerCase() : "9 dagen vooruit") +
+      row("#boot", "boat", boats.length > 1 ? "Je boten" : "Je boot", boatSub) +
+      row("#boot", "bolt", "Energie", soc != null ? "Accu " + Math.round(soc) + "%" : vic.data && vic.data.connected === false ? "Koppel je Victron" : "Victron") +
+      row("#service", "book", "Serviceboek", (S.entries || []).length ? S.entries.length + " registraties" : "Onderhoud bijhouden") +
+      "</div></section>";
+    var winkel = '<section class="ww-group"><h2>Winkel</h2><div class="ww-rows">' +
+      row("#shop", "bag", "Onderdelen voor je boot", boat ? "Passend bij " + boat.name : "30.000+ artikelen") +
+      row("/apps/bootmarkt", "market", "Bootmarkt", "Boten kopen en verkopen") +
+      row("/account", "box", "Bestellingen", "Status en facturen") +
+      "</div></section>";
+    var foot = '<p class="ww-account-line">' + (S.firstName ? "Ingelogd als " + esc(S.firstName) + '. <a href="/account">Mijn account</a>' : '<a href="/account/login?return_url=' + encodeURIComponent(S.appPath) + '">Inloggen</a>') + "</p>";
+    void login; void LOGO_URL;
+    return head + installHint() + aanBoord + winkel + foot;
   }
 
   // ---------- Vaarinformatie (Open-Meteo, testfase) ----------
@@ -364,8 +372,60 @@
     var saved = null;
     try { saved = JSON.parse(storageGet("ww-place") || "null"); } catch (e) { saved = null; }
     if (saved && typeof saved.lat === "number") { loadWeather(saved.lat, saved.lon, saved.label); return; }
+    var hlat = parseFloat(boatField("thuishaven_lat")), hlon = parseFloat(boatField("thuishaven_lon"));
+    if (isFinite(hlat) && isFinite(hlon)) { loadWeather(hlat, hlon, boatField("thuishaven") || "Thuishaven"); return; }
     var harbour = boatField("thuishaven") || boatField("ligplaats");
     if (harbour) { searchPlace(harbour); return; }
+  }
+
+  // ---------- Vaarcijfer: eigen berekening, afgestemd op het soort boot ----------
+  function boatClass() {
+    var t = String(boatField("boottype") || "");
+    if (/Zeiljacht|Catamaran|Trimaran|Platbodem|Skûtsje/i.test(t)) return { key: "zeil", label: "zeilboot", idealMin: 2, idealMax: 4, bad: 6 };
+    if (/Rubberboot|RIB|Tender|Vlet|Kano|Sloep/i.test(t)) return { key: "klein", label: /Sloep/i.test(t) ? "sloep" : t.toLowerCase(), idealMin: 0, idealMax: 3, bad: 5 };
+    if (/Speedboot|Consoleboot/i.test(t)) return { key: "speed", label: "speedboot", idealMin: 0, idealMax: 3, bad: 5 };
+    return { key: "motor", label: t ? t.toLowerCase() : "boot", idealMin: 0, idealMax: 4, bad: 6 };
+  }
+  function vaarcijfer(day) {
+    var bc = boatClass();
+    var w = beaufort(day.wind), g = beaufort(day.gust), score = 10, why = [];
+    if (w > bc.idealMax) { var over = w - bc.idealMax; score -= w >= bc.bad ? 5 + (w - bc.bad) : over * 1.5; why.push(w >= bc.bad ? "te veel wind voor een " + bc.label : "stevige wind"); }
+    if (w < bc.idealMin) { score -= (bc.idealMin - w) * 1.5; why.push("weinig wind om te zeilen"); }
+    if (g - w >= 2 || g >= bc.bad) { score -= g >= bc.bad ? 2 : 1; why.push("vlagen tot " + g + " Bft"); }
+    if (day.rainProb != null) { if (day.rainProb >= 70) { score -= 3; why.push("grote kans op regen"); } else if (day.rainProb >= 40) { score -= 1.5; why.push("kans op een bui"); } }
+    if (day.rain >= 5) score -= 1;
+    if (day.tmax != null) { if (day.tmax < 8) { score -= 2.5; why.push("koud"); } else if (day.tmax < 13) { score -= 1.5; why.push("fris"); } else if (day.tmax < 17) score -= 0.5; else if (day.tmax > 30) { score -= 0.5; why.push("heet"); } }
+    if (day.cloud != null && day.cloud < 40 && score > 6) score += 0.5;
+    if (day.code >= 95) { score = Math.min(score, 2); why.unshift("onweer"); }
+    if (day.code === 45 || day.code === 48) { score -= 1.5; why.push("mist"); }
+    score = Math.max(1, Math.min(10, Math.round(score)));
+    var verdict = score >= 8 ? "Prima vaarweer" : score >= 6 ? "Goed te doen" : score >= 4 ? "Matig vaarweer" : "Liever niet varen";
+    return { score: score, verdict: verdict, why: why.slice(0, 3), bc: bc };
+  }
+  function vaarDays() {
+    var d = ui.weather && ui.weather.daily;
+    if (!d || !d.time) return [];
+    return d.time.map(function (day, i) {
+      var x = { date: day, wind: d.wind_speed_10m_max[i], gust: d.wind_gusts_10m_max[i], tmax: d.temperature_2m_max[i], tmin: d.temperature_2m_min[i],
+        rainProb: d.precipitation_probability_max ? d.precipitation_probability_max[i] : null, rain: d.precipitation_sum ? d.precipitation_sum[i] : 0,
+        cloud: d.cloud_cover_mean ? d.cloud_cover_mean[i] : null, code: d.weather_code[i], dir: d.wind_direction_dominant ? d.wind_direction_dominant[i] : null };
+      x.v = vaarcijfer(x);
+      return x;
+    });
+  }
+  function scoreClass(n) { return n >= 8 ? "is-good" : n >= 6 ? "is-ok" : n >= 4 ? "is-meh" : "is-bad"; }
+  function vaarcijferHtml() {
+    var days = vaarDays();
+    if (!days.length) return "";
+    var t = days[0], v = t.v;
+    var dayName = function (x, i) { var l = i === 0 ? "Vandaag" : new Date(x.date + "T12:00:00").toLocaleDateString("nl-NL", { weekday: "short" }); return l.charAt(0).toUpperCase() + l.slice(1).replace(".", ""); };
+    var text = v.verdict + " voor je " + v.bc.label + ". Wind " + beaufort(t.wind) + " Bft" + (t.dir != null ? " uit het " + windDir(t.dir) : "") + ", " + Math.round(t.tmax) + "°" +
+      (t.rainProb != null ? ", " + t.rainProb + "% kans op regen" : "") + "." + (v.why.length ? " Let op: " + v.why.join(", ") + "." : "");
+    return '<section class="ww-section"><div class="ww-score-card"><div class="ww-score ' + scoreClass(v.score) + '"><strong>' + v.score + "</strong><span>/10</span></div>" +
+      '<div><span class="ww-eyebrow">Vaarcijfer vandaag</span><h2 style="margin:2px 0 4px">' + esc(v.verdict) + '</h2><p class="ww-small" style="margin:0">' + esc(text) + "</p></div></div>" +
+      '<div class="ww-score-days">' + days.map(function (x, i) {
+        return '<div class="ww-score-day"><span>' + esc(dayName(x, i)) + '</span><b class="' + scoreClass(x.v.score) + '">' + x.v.score + "</b><span>" + beaufort(x.wind) + " Bft</span><span>" + Math.round(x.tmax) + "°</span></div>";
+      }).join("") + '</div><p class="ww-small" style="margin:8px 0 0;opacity:.75">Berekend voor jouw ' + esc(v.bc.label) + " op basis van wind, vlagen, regen en temperatuur overdag. Altijd zelf de omstandigheden beoordelen.</p></section>";
   }
 
   function vaarinfoScreen() {
@@ -388,7 +448,7 @@
       var warn = bft >= 6 ? '<div class="ww-notice"><strong>Let op: ' + bft + " Bft.</strong> Voor kleine boten en rubberboten is dit te veel wind.</div>" : "";
       var marine = ui.marine && ui.marine.current && ui.marine.current.wave_height != null
         ? '<div class="ww-spec"><span class="ww-small">Golfhoogte</span><span>' + ui.marine.current.wave_height.toFixed(1).replace(".", ",") + " m</span></div>" : "";
-      body += '<section class="ww-section">' + warn +
+      body += vaarcijferHtml() + '<section class="ww-section">' + warn +
         '<div class="ww-wind-card"><div class="ww-wind-main"><span class="ww-wind-arrow" style="transform:rotate(' + ((c.wind_direction_10m + 180) % 360) + 'deg)" aria-hidden="true">↑</span>' +
         '<div><div class="ww-wind-bft">' + bft + ' Bft <span>' + windDir(c.wind_direction_10m) + "</span></div>" +
         '<div class="ww-small" style="color:#C9D6E2">' + Math.round(c.wind_speed_10m) + " kn · stoten " + Math.round(c.wind_gusts_10m) + " kn</div></div></div>" +
@@ -397,6 +457,7 @@
         '<div class="ww-spec"><span class="ww-small">Neerslag nu</span><span>' + (c.precipitation || 0).toString().replace(".", ",") + " mm</span></div>" + marine +
         (ui.weather.daily ? '<div class="ww-spec"><span class="ww-small">Zon op / onder</span><span>' + esc(String(ui.weather.daily.sunrise[0]).slice(11, 16)) + " – " + esc(String(ui.weather.daily.sunset[0]).slice(11, 16)) + "</span></div>" : "") +
         "</div>" + (ui.weather.source ? '<p class="ww-small" style="margin:6px 0 0;opacity:.7">Weerdata: ' + esc(ui.weather.source) + "</p>" : "") + "</section>";
+
 
       var h = ui.weather.hourly;
       if (h && h.time) {
@@ -437,7 +498,7 @@
       '<a class="ww-list-row ww-list-link" href="https://www.vaarweginformatie.nl/frp/main/#/nts" target="_blank" rel="noopener"><span>Berichten aan de scheepvaart</span><span>Stremmingen ›</span></a>' +
       '<a class="ww-list-row ww-list-link" href="https://waterinfo.rws.nl/" target="_blank" rel="noopener"><span>Waterstanden</span><span>Rijkswaterstaat ›</span></a>' +
       '<a class="ww-list-row ww-list-link" href="https://www.knmi.nl/nederland-nu/weer/waarschuwingen" target="_blank" rel="noopener"><span>Weerwaarschuwingen</span><span>KNMI ›</span></a>' +
-      '</div><p class="ww-small" style="margin:0">Weerdata: Open-Meteo.com (CC BY 4.0). Controleer altijd de officiële berichten voordat je vaart.</p></section>';
+      '</div><p class="ww-small" style="margin:0">Weerdata: MET Norway (CC BY 4.0), golven: Open-Meteo. Controleer altijd de officiële berichten voordat je vaart.</p></section>';
     return head + body;
   }
 
@@ -478,7 +539,7 @@
       '<header class="ww-map-head"><a class="ww-icon-btn" href="#home" aria-label="Terug">' + ICON.back + "</a>" +
       '<div style="flex:1;min-width:0"><h1 style="font-size:19px;color:#fff">Vaarkaart</h1>' +
       '<button type="button" class="ww-airdraft" data-airdraft>' + (ad ? "Doorvaarthoogte boot: <strong>" + fmtM(ad) + "</strong> · wijzig" : "Stel je doorvaarthoogte in") + "</button></div>" +
-      '<span class="ww-map-speed" data-speed hidden></span>' + (homeHaven() ? '<button type="button" class="ww-btn ww-btn-ghost ww-btn-sm ww-home-btn" data-go-home aria-label="Navigeer naar thuishaven">🏠</button>' : "") + '<button type="button" class="ww-btn ww-btn-amber ww-btn-sm" data-route-open>Route</button></header>' +
+      '<span class="ww-map-speed" data-speed hidden></span>' + (homeHaven() ? '<button type="button" class="ww-btn ww-btn-ghost ww-btn-sm ww-home-btn" data-go-home aria-label="Navigeer naar thuishaven">' + ICON.home + '</button>' : "") + '<button type="button" class="ww-btn ww-btn-amber ww-btn-sm" data-route-open>Route</button></header>' +
       '<div class="ww-map-tools-left"><button type="button" class="ww-map-btn" data-layers aria-label="Kaartlagen">' + ICON.box + "</button></div>" +
       '<div class="ww-nav-bar" data-nav-bar hidden></div>' +
       '<div id="ww-map" class="ww-map" role="application" aria-label="Vaarkaart"></div>' +
@@ -1288,7 +1349,7 @@
       eta.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }) + "</strong><span>aankomst</span></div></div>" +
       '<p class="ww-small" style="margin:0">' + opens.length + " brug" + (opens.length === 1 ? "" : "gen") + " moet" + (opens.length === 1 ? "" : "en") + " open · " + locks.length + " slui" + (locks.length === 1 ? "s" : "zen") + " · " + under.length + (under.length === 1 ? " brug" : " bruggen") + " waar je onderdoor past" +
       (r.air ? "" : ' · <button type="button" class="ww-link" data-airdraft>doorvaarthoogte instellen</button>') + "</p>" +
-      (r.mast ? '<p class="ww-small" style="margin:0">⛵ Staande mast: ' + (r.distanceM ? Math.round(100 * (r.staandeMastM || 0) / r.distanceM) : 0) + "% van de route over de officiële staande mastroute." + (r.distanceM && (r.staandeMastM || 0) / r.distanceM < 0.8 ? " Controleer de rest op vaste bruggen." : "") + "</p>" : "") +
+      (r.mast ? '<p class="ww-small" style="margin:0">Staande mast: ' + (r.distanceM ? Math.round(100 * (r.staandeMastM || 0) / r.distanceM) : 0) + "% van de route over de officiële staande mastroute." + (r.distanceM && (r.staandeMastM || 0) / r.distanceM < 0.8 ? " Controleer de rest op vaste bruggen." : "") + "</p>" : "") +
       (r.blockedOnRoute && r.blockedOnRoute.length ? '<div class="ww-notice" style="background:#FEF2F2;border-color:#FCA5A5;color:#991B1B"><strong>Let op: deze route is nu gestremd</strong> bij ' + esc(r.blockedOnRoute.join(", ")) + ". Er is geen omweg gevonden. Bekijk het bericht hieronder of bel de bediening.</div>" :
         r.detourFor && r.detourFor.length ? '<div class="ww-notice" style="background:#EFF6FF;border-color:#93C5FD;color:#1E3A8A">Route vaart om een stremming heen: ' + esc(r.detourFor.join(", ")) + ".</div>" : "") +
       '<button type="button" class="ww-btn ww-btn-primary" data-nav-start>Start navigatie</button>' +
@@ -1414,7 +1475,7 @@
   function victronSection() {
     if (!vic.data && !vic.loading && Date.now() - (vic.at || 0) > 20000) loadVictron(false);
     var d = vic.data;
-    var head = '<h2 style="display:flex;align-items:center;gap:8px"><span style="color:#0877BD">' + ICON.bolt.replace('width="26" height="26"', 'width="20" height="20"') + "</span>Energie aan boord · Victron</h2>";
+    var head = '<h2 style="display:flex;align-items:center;gap:8px"><span style="color:var(--brass)">' + ICON.bolt.replace('width="26" height="26"', 'width="20" height="20"') + "</span>Energie aan boord · Victron</h2>";
     if (!d) return '<section class="ww-section">' + head + '<p class="ww-small">Victron laden…</p></section>';
     if (!d.connected) {
       return '<section class="ww-section">' + head + '<div class="ww-card" style="padding:16px;display:grid;gap:10px">' +
@@ -1667,16 +1728,16 @@
   var onb = { type: "", data: {}, saving: false, error: "", intro: storageGet("ww-intro") !== "1" };
   var INTRO = [
     { icon: "logo", title: "Welkom aan boord", text: "De WetterWinkel-app: alles voor je boot en je vaartocht in één app." },
-    { icon: "🗺️", title: "Vaarkaart & route", text: "Plan je route van A naar B. Bruggen, sluizen, dieptes en de staande mastroute, afgestemd op jouw boot. Met gesproken aanwijzingen." },
-    { icon: "🚧", title: "Stremmingen & weer", text: "Live stremmingen van Rijkswaterstaat, wind in Beaufort en het weer waar je vaart." },
-    { icon: "⚓", title: "Havens & ligplaatsen", text: "Jachthavens met openingstijden en contact, Marrekrite-plaatsen, restaurants en supermarkten aan het water." },
-    { icon: "🧭", title: "Captain AI", text: "Vraag alles over onderhoud en storingen. Captain kent jouw boot en motor en zoekt het juiste onderdeel." },
-    { icon: "🔋", title: "Je boot & serviceboek", text: "Je bootgegevens, onderhoud en facturen op één plek. Koppel je Victron en zie je accu en zonnepanelen." },
-    { icon: "🛒", title: "Shoppen voor jouw boot", text: "Onderdelen die passen bij jouw boot en motor. Snel geleverd, scherp geprijsd." }
+    { icon: "pin", title: "Vaarkaart & route", text: "Plan je route van A naar B. Bruggen, sluizen, dieptes en de staande mastroute, afgestemd op jouw boot. Met gesproken aanwijzingen." },
+    { icon: "wind", title: "Stremmingen & weer", text: "Live stremmingen van Rijkswaterstaat, wind in Beaufort en het weer waar je vaart." },
+    { icon: "home", title: "Havens & ligplaatsen", text: "Jachthavens met openingstijden en contact, Marrekrite-plaatsen, restaurants en supermarkten aan het water." },
+    { icon: "captain", title: "Captain AI", text: "Vraag alles over onderhoud en storingen. Captain kent jouw boot en motor en zoekt het juiste onderdeel." },
+    { icon: "bolt", title: "Je boot & serviceboek", text: "Je bootgegevens, onderhoud en facturen op één plek. Koppel je Victron en zie je accu en zonnepanelen." },
+    { icon: "bag", title: "Shoppen voor jouw boot", text: "Onderdelen die passen bij jouw boot en motor. Snel geleverd, scherp geprijsd." }
   ];
   function introScreen() {
     return '<div class="ww-intro"><div class="ww-intro-track" data-intro-track>' + INTRO.map(function (sl, i) {
-      var pic = sl.icon === "logo" ? '<img src="' + esc(S.iconUrl || "") + '" alt="WetterWinkel" width="120" height="120" style="border-radius:28px">' : '<div class="ww-intro-icon">' + sl.icon + "</div>";
+      var pic = sl.icon === "logo" ? '<img src="' + esc(S.iconUrl || "") + '" alt="WetterWinkel" width="120" height="120" style="border-radius:28px">' : '<div class="ww-intro-icon">' + (ICON[sl.icon] || "") + "</div>";
       return '<section class="ww-intro-slide">' + pic + "<h1>" + esc(sl.title) + "</h1><p>" + esc(sl.text) + "</p>" +
         (i === INTRO.length - 1 ? '<button type="button" class="ww-btn ww-btn-primary" data-intro-done>Maak je bootprofiel aan</button>' : '<button type="button" class="ww-btn ww-btn-primary" data-intro-next="' + (i + 1) + '">Volgende</button>') +
         "</section>";
@@ -1691,7 +1752,7 @@
       document.querySelectorAll("[data-dot]").forEach(function (d) { d.classList.toggle("is-on", Number(d.getAttribute("data-dot")) === i); });
     }, { passive: true });
   }
-  var ONB_TYPES = [["Rubberboot", "🛟"], ["RIB", "🚤"], ["Motorjacht", "🛥️"], ["Zeiljacht", "⛵"], ["Speedboot", "💨"], ["Sloep", "🚣"]];
+  var ONB_TYPES = [["Rubberboot", "dinghy"], ["RIB", "dinghy"], ["Motorjacht", "boat"], ["Zeiljacht", "boat"], ["Speedboot", "motor"], ["Sloep", "boat"]];
   var ONB_OTHER = ["Motorboot", "Tender", "Consoleboot", "Sportcruiser", "Kajuitboot", "Visboot", "Kruiser", "Trawler", "Platbodem", "Catamaran", "Houseboat / woonboot", "Anders"];
   var MAST_T = { Zeiljacht: 1, Catamaran: 1, Platbodem: 1 }, MJ_T = { Motorjacht: 1, Kruiser: 1, Trawler: 1, Sportcruiser: 1 }, SP_T = { Speedboot: 1, Consoleboot: 1 };
   function requiredKeys(d) {
@@ -1741,7 +1802,7 @@
         '<p style="margin:6px 0 0;color:#C9D6E2">Maak eerst je bootprofiel. Dan kloppen je routes, onderdelen en het advies van Captain AI.</p></header>';
     if (!onb.type) {
       return head + '<section class="ww-section"><h2>Wat voor boot heb je?</h2><div class="ww-onb-grid">' +
-        ONB_TYPES.map(function (t) { return '<button type="button" class="ww-onb-type" data-onb-type="' + esc(t[0]) + '"><span>' + t[1] + "</span>" + esc(t[0]) + "</button>"; }).join("") +
+        ONB_TYPES.map(function (t) { return '<button type="button" class="ww-onb-type" data-onb-type="' + esc(t[0]) + '"><span>' + (ICON[t[1]] || "") + "</span>" + esc(t[0]) + "</button>"; }).join("") +
         '</div><label class="ww-field" style="margin-top:12px">Ander type<select class="ww-select" data-onb-other><option value="">Kies…</option>' +
         ONB_OTHER.map(function (o) { return "<option>" + esc(o) + "</option>"; }).join("") + "</select></label></section>";
     }
@@ -1755,7 +1816,7 @@
       (mast ? "" : onbField("doorvaarthoogte", "Doorvaarthoogte (cm)", { num: 1, ph: "hoogste punt boven water" })) +
       onbTypeFields(t) +
       onbField("thuishaven", "Thuishaven", { ph: "bijv. Jachthaven De Horne, Terherne" }) +
-      '<button type="button" class="ww-link" data-onb-gps style="justify-self:start;margin-top:-6px">' + (onb.data.thuishaven_lat ? "✓ Positie van je ligplaats opgeslagen" : "📍 Ik lig nu in mijn thuishaven — gebruik mijn positie") + "</button>" +
+      '<button type="button" class="ww-link" data-onb-gps style="justify-self:start;margin-top:-6px">' + (onb.data.thuishaven_lat ? "Positie van je ligplaats opgeslagen" : "Ik lig nu in mijn thuishaven: gebruik mijn positie") + "</button>" +
       '<h2 style="margin:8px 0 0">Motor</h2>' +
       onbField("soort_motor", "Soort motor", { rerender: 1, options: ["Buitenboord benzine", "Buitenboord elektrisch", "Binnenboord diesel", "Binnenboord benzine", "Binnenboord elektrisch", "Hybride", "Geen motor (zeilen/roeien)"] }) +
       (/^geen motor/i.test(onb.data.soort_motor || "") ? "" :

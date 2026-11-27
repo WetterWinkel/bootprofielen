@@ -314,3 +314,127 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ww-go-home { width: 100%; display: grid; gap: 2px; padding: 14px; }
 .ww-go-home .ww-small { color: #D7E5F2; font-weight: 500; }
 .ww-home-btn { min-width: 44px; padding: 0 10px; font-size: 18px; }
+
+/* =====================================================================
+   Thema "Kajuit": diep marineblauw, messing als enige accent,
+   koel zeilwit, serif (New York op iPhone) voor koppen. Rustig, geen speelgoed.
+   ===================================================================== */
+:root {
+  --navy: #0B2A43;      /* diepzee */
+  --navy-2: #13385A;    /* kajuit, iets lichter */
+  --brass: #B08D57;     /* messing — alleen voor accenten */
+  --brass-ink: #7A5E33;
+  --teal: #0B2A43;
+  --teal-soft: #EEF1F2;
+  --teal-ink: #0B2A43;
+  --amber: #B08D57;
+  --ink: #142230;
+  --muted: #5C6B77;
+  --line: #E2E5E3;
+  --bg: #F5F6F4;        /* zeilwit, koel */
+  --card: #FFFFFF;
+  --serif: ui-serif, "New York", "Iowan Old Style", "Palatino", Georgia, serif;
+  --sans: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+}
+html, body { font-family: var(--sans); letter-spacing: -0.005em; }
+h1, h2, h3, .ww-head h1, .ww-wordmark { font-family: var(--serif); font-weight: 600; letter-spacing: -0.01em; }
+.ww-section h2 { font-size: 20px; }
+a { color: var(--navy); }
+
+/* Knoppen: minder bol, meer vakmanschap */
+.ww-btn { border-radius: 10px; font-weight: 600; letter-spacing: 0; }
+.ww-btn-primary { background: var(--navy); color: #fff; }
+.ww-btn-amber { background: var(--brass); color: #fff; }
+.ww-btn-ghost { color: var(--navy); border-color: #CDD3D6; }
+.ww-btn-sm { border-radius: 8px; }
+.ww-link { color: var(--navy); }
+
+/* Kaarten en lijsten: vlak, haarlijnen, geen bolle tegels */
+.ww-card, .ww-list { border-radius: 10px; border: 1px solid var(--line); box-shadow: none; }
+.ww-list-row { border-bottom-color: #ECEEEC; }
+
+/* Kopbalk op subpagina's */
+.ww-head { background: var(--navy); padding-bottom: 22px; }
+.ww-head h1 { font-size: 28px; }
+.ww-icon-btn { border-radius: 10px; background: rgba(255,255,255,.08); }
+.ww-search { border-radius: 10px; }
+
+/* Onderbalk: messing streep op het actieve onderdeel */
+.ww-nav { background: rgba(255,255,255,.96); backdrop-filter: saturate(1.4) blur(12px); -webkit-backdrop-filter: saturate(1.4) blur(12px); border-top-color: var(--line); }
+.ww-nav a { color: #7C8A94; font-weight: 500; position: relative; }
+.ww-nav a[aria-current="page"] { color: var(--navy); font-weight: 600; }
+.ww-nav a[aria-current="page"]::before { content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 2px; background: var(--brass); border-radius: 0 0 2px 2px; }
+
+/* ---------- Home ---------- */
+.ww-hero { background: var(--navy); color: #fff; padding: calc(16px + var(--safe-t)) 22px 24px; display: flex; flex-direction: column; gap: 14px; }
+.ww-hero-top { display: flex; align-items: center; gap: 10px; }
+.ww-hero-mark { border-radius: 9px; background: #fff; }
+.ww-hero-brand { font-family: var(--serif); font-size: 19px; font-weight: 600; flex: 1; letter-spacing: 0.01em; }
+.ww-hero h1 { font-size: 32px; line-height: 1.1; margin-top: 10px; color: #fff; }
+.ww-hero-boat { margin: -6px 0 0; color: #B9C6D1; font-size: 15px; }
+.ww-hero-score { display: flex; align-items: center; gap: 14px; padding: 14px 14px 14px 12px; border-radius: 12px; background: var(--navy-2); color: #fff; text-decoration: none; border: 1px solid rgba(176,141,87,.35); }
+.ww-hero-score-text { flex: 1; display: grid; gap: 2px; }
+.ww-hero-score-text strong { font-family: var(--serif); font-size: 19px; font-weight: 600; }
+.ww-hero-score-text span { color: #B9C6D1; font-size: 13px; }
+.ww-ring { --p: 0; width: 58px; height: 58px; border-radius: 50%; flex: none; display: grid; place-items: center; background: conic-gradient(var(--brass) calc(var(--p) * 1%), rgba(255,255,255,.12) 0); }
+.ww-ring b { width: 48px; height: 48px; border-radius: 50%; background: var(--navy-2); display: grid; place-items: center; font-family: var(--serif); font-size: 24px; font-weight: 600; }
+.ww-ring.is-bad { background: conic-gradient(#C26A4A calc(var(--p) * 1%), rgba(255,255,255,.12) 0); }
+.ww-ring.is-empty { background: rgba(255,255,255,.12); }
+.ww-chev { transform: rotate(180deg); width: 18px; height: 18px; opacity: .55; flex: none; }
+.ww-hero-ask { display: flex; align-items: center; gap: 10px; background: #fff; border-radius: 12px; padding: 0 6px 0 12px; height: 52px; color: var(--navy); }
+.ww-hero-ask > svg { width: 22px; height: 22px; flex: none; }
+.ww-hero-ask input { flex: 1; min-width: 0; border: 0; outline: none; font-size: 16px; background: transparent; color: var(--ink); }
+.ww-hero-ask button { width: 40px; height: 40px; border-radius: 9px; border: 0; background: var(--brass); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.ww-hero-ask button svg { width: 18px; height: 18px; }
+
+.ww-group { padding: 22px 20px 4px; }
+.ww-group h2 { font-size: 15px; font-family: var(--sans); font-weight: 600; color: var(--muted); margin: 0 4px 8px; letter-spacing: 0; }
+.ww-rows { background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.ww-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 14px; background: none; border: 0; border-bottom: 1px solid #ECEEEC; text-align: left; color: var(--ink); text-decoration: none; cursor: pointer; font: inherit; }
+.ww-row:last-child { border-bottom: 0; }
+.ww-row:active { background: #F1F3F2; }
+.ww-row-icon { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; color: var(--navy); background: #EEF1F2; flex: none; }
+.ww-row-icon svg { width: 19px; height: 19px; }
+.ww-row-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.ww-row-text strong { font-weight: 600; font-size: 16px; }
+.ww-row-text span { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ww-row .ww-chev { color: var(--muted); }
+.ww-account-line { text-align: center; color: var(--muted); font-size: 13px; padding: 18px 20px 8px; margin: 0; }
+
+/* ---------- Vaarcijfer (vaarinformatie) ---------- */
+.ww-score-card { display: flex; gap: 16px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.ww-score { width: 72px; height: 72px; border-radius: 50%; flex: none; display: flex; align-items: baseline; justify-content: center; padding-top: 14px; border: 2px solid var(--brass); color: var(--navy); }
+.ww-score strong { font-family: var(--serif); font-size: 32px; line-height: 1; }
+.ww-score span { font-size: 12px; color: var(--muted); margin-left: 1px; }
+.ww-score.is-bad, .ww-score.is-meh { border-color: #C26A4A; }
+.ww-eyebrow { font-size: 13px; color: var(--muted); }
+.ww-score-days { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 4px; }
+.ww-score-day { display: grid; justify-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+.ww-score-day b { font-family: var(--serif); font-size: 18px; color: var(--navy); width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; }
+.ww-score-day b.is-good { background: #E7EFE9; }
+.ww-score-day b.is-ok { background: #F1EBDD; }
+.ww-score-day b.is-meh, .ww-score-day b.is-bad { background: #F4E4DD; color: #8E3F26; }
+@media (max-width: 380px) { .ww-score-days { grid-template-columns: repeat(5, minmax(0, 1fr)); row-gap: 10px; } }
+
+/* Windkaart: marine i.p.v. felblauw */
+.ww-wind-card { background: var(--navy); border-radius: 12px; }
+
+/* Rondleiding en onboarding: rustiger */
+.ww-intro { background: var(--navy); }
+.ww-intro-icon { background: rgba(176,141,87,.14); color: var(--brass); border: 1px solid rgba(176,141,87,.35); }
+.ww-intro-icon svg { width: 54px; height: 54px; }
+.ww-intro-slide h1 { font-family: var(--serif); font-weight: 600; font-size: 30px; }
+.ww-intro-slide .ww-btn { background: var(--brass); color: #fff; }
+.ww-intro-dots i.is-on { background: var(--brass); }
+.ww-onb-type { border-radius: 10px; font: 600 15px/1.2 var(--sans); }
+.ww-onb-type span { color: var(--navy); }
+.ww-onb-type span svg { width: 28px; height: 28px; }
+.ww-onb-type:active { border-color: var(--brass); background: #FAF7F1; }
+.ww-check input { accent-color: var(--navy); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+.ww-bar i { background: var(--navy); }
+.ww-pay summary strong::after { color: var(--brass); }
+.ww-boat-photo { background: linear-gradient(160deg, #13385A, #0B2A43); color: var(--brass); }
+.ww-boat-hero { border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(11,42,67,.10); border-radius: 12px; }
+.ww-spec { border-radius: 8px; }
+.ww-install-card { border-color: var(--line) !important; border-radius: 12px !important; }

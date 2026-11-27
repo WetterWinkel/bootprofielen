@@ -104,8 +104,11 @@ async function metNorway(lat: number, lon: number) {
     if (!days.has(day)) days.set(day, []);
     days.get(day)!.push(t);
   }
-  const dayKeys = [...days.keys()].slice(0, 3);
-  const daily: any = { time: dayKeys, weather_code: [], temperature_2m_max: [], temperature_2m_min: [], wind_speed_10m_max: [], wind_gusts_10m_max: [], sunrise: [], sunset: [] };
+  const dayKeys = [...days.keys()].slice(0, 9);
+  const daily: any = {
+    time: dayKeys, weather_code: [], temperature_2m_max: [], temperature_2m_min: [], wind_speed_10m_max: [], wind_gusts_10m_max: [],
+    sunrise: [], sunset: [], precipitation_sum: [], precipitation_probability_max: [], cloud_cover_mean: [], wind_direction_dominant: [],
+  };
   for (const day of dayKeys) {
     const list = days.get(day)!;
     const temps = list.map((t) => det(t).air_temperature).filter((v) => v != null);
@@ -118,6 +121,30 @@ async function metNorway(lat: number, lon: number) {
     const sun = sunTimes(day, lat, lon);
     daily.sunrise.push(sun ? isoLocal(sun.rise) : `${day}T--:--`);
     daily.sunset.push(sun ? isoLocal(sun.set) : `${day}T--:--`);
+    // Alleen daguren (8–20 u) voor het vaarcijfer: 's nachts vaart bijna niemand.
+    const dayTime = list.filter((t) => {
+      const h = Number(hmAms(new Date(t.time)).slice(0, 2));
+      return h >= 8 && h <= 20;
+    });
+    const span = dayTime.length ? dayTime : list;
+    const precip = (t: any) => t.data?.next_1_hours?.details?.precipitation_amount ?? (t.data?.next_6_hours?.details?.precipitation_amount ?? 0) / 6;
+    daily.precipitation_sum.push(Math.round(span.reduce((sum, t) => sum + precip(t), 0) * 10) / 10);
+    const probs = span.map((t) => t.data?.next_1_hours?.details?.probability_of_precipitation ?? t.data?.next_6_hours?.details?.probability_of_precipitation).filter((v) => v != null);
+    daily.precipitation_probability_max.push(probs.length ? Math.round(Math.max(...probs)) : null);
+    const clouds = span.map((t) => det(t).cloud_area_fraction).filter((v) => v != null);
+    daily.cloud_cover_mean.push(clouds.length ? Math.round(clouds.reduce((a, b) => a + b, 0) / clouds.length) : null);
+    // Overheersende windrichting (vectorgemiddelde).
+    let sx = 0, sy = 0;
+    for (const t of span) {
+      const dir = det(t).wind_from_direction, sp = det(t).wind_speed ?? 0;
+      if (dir == null) continue;
+      sx += Math.sin((dir * Math.PI) / 180) * sp;
+      sy += Math.cos((dir * Math.PI) / 180) * sp;
+    }
+    daily.wind_direction_dominant.push(Math.round(((Math.atan2(sx, sy) * 180) / Math.PI + 360) % 360));
+    // Wind en vlagen ook alleen overdag.
+    daily.wind_speed_10m_max[daily.wind_speed_10m_max.length - 1] = Math.max(...span.map((t) => (det(t).wind_speed ?? 0) * KN));
+    daily.wind_gusts_10m_max[daily.wind_gusts_10m_max.length - 1] = Math.max(...span.map(gust));
   }
   return { current, hourly, daily, source: "MET Norway" };
 }
@@ -148,8 +175,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       `https://api.open-meteo.com/v1/forecast?${base}` +
       "&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation" +
       "&hourly=wind_speed_10m,wind_gusts_10m,wind_direction_10m,precipitation_probability,temperature_2m" +
-      "&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_gusts_10m_max,sunrise,sunset" +
-      "&wind_speed_unit=kn&forecast_days=3";
+      "&daily=weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_gusts_10m_max,sunrise,sunset,precipitation_sum,precipitation_probability_max,cloud_cover_mean,wind_direction_dominant" +
+      "&wind_speed_unit=kn&forecast_days=9";
     const marineUrl = `https://marine-api.open-meteo.com/v1/marine?${base}&current=wave_height,wave_direction,wave_period`;
     const [weather, marine] = await Promise.all([
       metNorway(lat, lon).catch((error) => {
