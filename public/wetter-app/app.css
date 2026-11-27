@@ -293,3 +293,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ww-pay .ww-list { margin: 0 8px 8px; }
 .ww-pay a.ww-list-row { color: inherit; text-decoration: none; }
 .ww-strem { color: #fff !important; line-height: 1 !important; text-align: center; }
+.ww-onb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ww-onb-type { display: grid; gap: 6px; justify-items: center; padding: 18px 10px; border: 1px solid #DCE6F0; border-radius: 16px; background: #fff; font: 700 16px/1.2 inherit; color: #10202E; cursor: pointer; }
+.ww-onb-type span { font-size: 30px; }
+.ww-onb-type:active { background: #EEF5FB; border-color: #0877BD; }
+.ww-intro { min-height: 100dvh; display: flex; flex-direction: column; background: linear-gradient(180deg, #07345C 0%, #0A4A80 55%, #0877BD 100%); color: #fff; padding-bottom: max(18px, env(safe-area-inset-bottom)); }
+.ww-intro-track { flex: 1; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.ww-intro-track::-webkit-scrollbar { display: none; }
+.ww-intro-slide { flex: 0 0 100%; scroll-snap-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 18px; padding: max(48px, env(safe-area-inset-top)) 28px 24px; box-sizing: border-box; }
+.ww-intro-slide h1 { margin: 0; font-size: 28px; line-height: 1.15; color: #fff; }
+.ww-intro-slide p { margin: 0; font-size: 17px; line-height: 1.45; color: #D7E5F2; max-width: 340px; }
+.ww-intro-slide .ww-btn { width: min(320px, 100%); margin-top: 10px; background: #fff; color: #07345C; }
+.ww-intro-icon { width: 120px; height: 120px; border-radius: 32px; background: rgba(255,255,255,.12); display: grid; place-items: center; font-size: 60px; }
+.ww-intro-dots { display: flex; justify-content: center; gap: 8px; padding: 6px 0 10px; }
+.ww-intro-dots i { width: 8px; height: 8px; border-radius: 99px; background: rgba(255,255,255,.35); transition: width .2s; }
+.ww-intro-dots i.is-on { width: 22px; background: #fff; }
+.ww-intro-skip { color: #fff !important; text-align: center; padding: 10px; min-height: 44px; }

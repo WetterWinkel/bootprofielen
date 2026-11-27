@@ -4,6 +4,7 @@
 // Nieuwe, losstaande route. Raakt geen bestaande Bootmarkt-, Captain AI- of
 // bootprofielroutes aan. Alleen zichtbaar voor klant-id's in
 // APP_PREVIEW_CUSTOMER_IDS (standaard alleen Bernard).
+import { createBootprofiel } from "../lib/wetter-app.server";
 import { ensureStremmingen } from "../lib/stremmingen.server";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import prisma from "../db.server";
@@ -21,7 +22,7 @@ import {
 } from "../lib/wetter-app.server";
 
 const APP_PATH = "/apps/bootmarkt/app";
-const ASSET_VERSION = "18";
+const ASSET_VERSION = "19";
 
 function assetBase() {
   return `${(process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "")}/wetter-app`;
@@ -178,6 +179,17 @@ export async function action({ request }: ActionFunctionArgs) {
     const { admin } = await unauthenticated.admin(shop);
     const customerId = customerGid(rawCustomerId);
     const body = await request.json();
+    if (body.intent === "profile_create") {
+      const id = await createBootprofiel(admin, customerId, body.profile);
+      const boats = await ownedBoats(admin, customerId);
+      return json({
+        success: true,
+        message: "Je bootprofiel is aangemaakt. Welkom aan boord!",
+        boatId: id,
+        boats: boats.map((b) => ({ id: b.id, name: boatName(b), data: b.data })),
+      });
+    }
+
     const boats = await ownedBoats(admin, customerId);
     const boat = boats.find((item) => item.id === String(body.profileId || ""));
     if (!boat) return json({ success: false, message: "Bootprofiel niet gevonden." }, 404);

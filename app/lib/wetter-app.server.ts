@@ -156,3 +156,69 @@ export async function productsForBoat(admin: any, boat: AppBoat | null) {
     };
   });
 }
+
+// ---- Bootprofiel aanmaken vanuit de app (zelfde opslag als in het klantaccount) ----
+const PROFILE_KEYS = new Set([
+  "boottype", "naam_schip", "merk_boot", "model_boot", "bouwjaar_boot", "materiaal_romp",
+  "lengte", "breedte", "diepgang", "doorvaarthoogte", "brandstof", "soort_motor",
+  "motormerk", "motormodel", "motorvermogen", "aantal_motoren", "thuishaven", "vaargebied",
+  "aantal_masten", "masthoogte", "tuigage", "kieltype", "mast_strijkbaar",
+  "soort_bodem", "soort_tube", "tube_diameter", "luchtkamers", "console", "max_pk", "max_personen",
+  "rompvorm", "stuurstand", "trailer",
+]);
+
+export async function createBootprofiel(admin: any, customerId: string, input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Ongeldige bootgegevens.");
+  const data: Record<string, string> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (!PROFILE_KEYS.has(key) || value == null) continue;
+    const text = String(value).trim().slice(0, 120);
+    if (text) data[key] = text;
+  }
+  if (!data.boottype) throw new Error("Kies eerst wat voor boot je hebt.");
+  if (!data.naam_schip && !data.merk_boot && !data.model_boot) throw new Error("Vul de naam, het merk of het model van je boot in.");
+  data.aangemaakt_via = "app";
+
+  const existing = await ownedBoats(admin, customerId);
+  if (existing.length >= 20) throw new Error("Je hebt al het maximale aantal boten.");
+
+  const created: any = await (await admin.graphql(
+    `#graphql
+      mutation AppBootprofiel($metaobject: MetaobjectCreateInput!) {
+        metaobjectCreate(metaobject: $metaobject) { metaobject { id } userErrors { message } }
+      }`,
+    {
+      variables: {
+        metaobject: {
+          type: "$app:bootprofiel",
+          fields: [
+            { key: "naam", value: data.naam_schip || data.model_boot || data.merk_boot || "Boot" },
+            { key: "data", value: JSON.stringify(data) },
+            { key: "klant_id", value: customerId },
+          ],
+        },
+      },
+    },
+  )).json();
+  const id = created.data?.metaobjectCreate?.metaobject?.id;
+  const err = created.data?.metaobjectCreate?.userErrors?.[0]?.message || created.errors?.[0]?.message;
+  if (!id || err) throw new Error(err || "Bootprofiel opslaan mislukt.");
+
+  const ids = [...new Set([...existing.map((b) => b.id), id])];
+  const link = async (namespace: string, key: string) => {
+    const r: any = await (await admin.graphql(
+      `#graphql
+        mutation AppLinkBootprofiel($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }`,
+      { variables: { m: [{ ownerId: customerId, namespace, key, type: "list.metaobject_reference", value: JSON.stringify(ids) }] } },
+    )).json();
+    const e = r.data?.metafieldsSet?.userErrors?.[0]?.message || r.errors?.[0]?.message;
+    if (e) throw new Error(e);
+  };
+  await link(METAFIELD_NAMESPACE, METAFIELD_KEY);
+  try {
+    await link("custom", "bootprofielen_overzicht");
+  } catch (error) {
+    console.warn("Bootprofielen-klantoverzicht synchroniseren mislukt", error);
+  }
+  return id as string;
+}

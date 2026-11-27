@@ -1576,7 +1576,118 @@
   }
 
   // ---------- render ----------
+  // ---------- Verplicht eerst een bootprofiel (onboarding) ----------
+  var onb = { type: "", data: {}, saving: false, error: "", intro: storageGet("ww-intro") !== "1" };
+  var INTRO = [
+    { icon: "logo", title: "Welkom aan boord", text: "De WetterWinkel-app: alles voor je boot en je vaartocht in één app." },
+    { icon: "🗺️", title: "Vaarkaart & route", text: "Plan je route van A naar B. Bruggen, sluizen, dieptes en de staande mastroute, afgestemd op jouw boot. Met gesproken aanwijzingen." },
+    { icon: "🚧", title: "Stremmingen & weer", text: "Live stremmingen van Rijkswaterstaat, wind in Beaufort en het weer waar je vaart." },
+    { icon: "⚓", title: "Havens & ligplaatsen", text: "Jachthavens met openingstijden en contact, Marrekrite-plaatsen, restaurants en supermarkten aan het water." },
+    { icon: "🧭", title: "Captain AI", text: "Vraag alles over onderhoud en storingen. Captain kent jouw boot en motor en zoekt het juiste onderdeel." },
+    { icon: "🔋", title: "Je boot & serviceboek", text: "Je bootgegevens, onderhoud en facturen op één plek. Koppel je Victron en zie je accu en zonnepanelen." },
+    { icon: "🛒", title: "Shoppen voor jouw boot", text: "Onderdelen die passen bij jouw boot en motor. Snel geleverd, scherp geprijsd." }
+  ];
+  function introScreen() {
+    return '<div class="ww-intro"><div class="ww-intro-track" data-intro-track>' + INTRO.map(function (sl, i) {
+      var pic = sl.icon === "logo" ? '<img src="' + esc(S.iconUrl || "") + '" alt="WetterWinkel" width="120" height="120" style="border-radius:28px">' : '<div class="ww-intro-icon">' + sl.icon + "</div>";
+      return '<section class="ww-intro-slide">' + pic + "<h1>" + esc(sl.title) + "</h1><p>" + esc(sl.text) + "</p>" +
+        (i === INTRO.length - 1 ? '<button type="button" class="ww-btn ww-btn-primary" data-intro-done>Maak je bootprofiel aan</button>' : '<button type="button" class="ww-btn ww-btn-primary" data-intro-next="' + (i + 1) + '">Volgende</button>') +
+        "</section>";
+    }).join("") + '</div><div class="ww-intro-dots">' + INTRO.map(function (x, i) { return '<i data-dot="' + i + '"' + (i === 0 ? ' class="is-on"' : "") + "></i>"; }).join("") +
+      '</div><button type="button" class="ww-link ww-intro-skip" data-intro-done>Sla over en maak direct je bootprofiel aan ›</button></div>';
+  }
+  function bindIntro() {
+    var track = document.querySelector("[data-intro-track]");
+    if (!track) return;
+    track.addEventListener("scroll", function () {
+      var i = Math.round(track.scrollLeft / track.clientWidth);
+      document.querySelectorAll("[data-dot]").forEach(function (d) { d.classList.toggle("is-on", Number(d.getAttribute("data-dot")) === i); });
+    }, { passive: true });
+  }
+  var ONB_TYPES = [["Rubberboot", "🛟"], ["RIB", "🚤"], ["Motorjacht", "🛥️"], ["Zeiljacht", "⛵"], ["Speedboot", "💨"], ["Sloep", "🚣"]];
+  var ONB_OTHER = ["Motorboot", "Tender", "Consoleboot", "Sportcruiser", "Kajuitboot", "Visboot", "Kruiser", "Trawler", "Platbodem", "Catamaran", "Houseboat / woonboot", "Anders"];
+  function onbField(name, label, opts) {
+    opts = opts || {};
+    var v = onb.data[name] || "";
+    if (opts.options) {
+      return '<label class="ww-field">' + esc(label) + '<select class="ww-select" name="' + name + '"><option value="">Kies…</option>' +
+        opts.options.map(function (o) { return "<option" + (o === v ? " selected" : "") + ">" + esc(o) + "</option>"; }).join("") + "</select></label>";
+    }
+    return '<label class="ww-field">' + esc(label) + '<input name="' + name + '" value="' + esc(v) + '"' + (opts.num ? ' inputmode="decimal"' : "") + (opts.ph ? ' placeholder="' + esc(opts.ph) + '"' : "") + "></label>";
+  }
+  function onbTypeFields(t) {
+    var TUBE = ["PVC", "Hypalon / CSM", "Hypalon-Neopreen", "ORCA (Hypalon)", "Polyurethaan (PU)", "Weet ik niet"];
+    if (t === "Zeiljacht" || t === "Catamaran" || t === "Platbodem") return onbField("aantal_masten", "Aantal masten", { options: ["1", "2", "3 of meer"] }) +
+      onbField("masthoogte", "Masthoogte boven water (cm)", { num: 1, ph: "bijv. 1350" }) +
+      onbField("mast_strijkbaar", "Mast strijkbaar", { options: ["Nee", "Ja, staande mast strijkbaar", "Ja, met mastkraan"] }) +
+      onbField("kieltype", "Kiel", { options: ["Vaste kiel (fin)", "Langkiel", "Kimkiel", "Kielmidzwaard", "Midzwaard", "Zijzwaarden", "Hefkiel", "Anders"] });
+    if (t === "Rubberboot") return onbField("soort_bodem", "Soort bodem", { options: ["Lattenbodem", "Airdeck / luchtbodem", "Aluminium bodem", "Houten vloer (multiplex)", "Rolbodem", "Weet ik niet"] }) +
+      onbField("soort_tube", "Soort tube", { options: TUBE }) + onbField("max_pk", "Max. motorvermogen (pk)", { num: 1 });
+    if (t === "RIB") return onbField("soort_bodem", "Bodem", { options: ["Polyester V-bodem", "Aluminium V-bodem", "Diepe V-bodem", "Weet ik niet"] }) +
+      onbField("soort_tube", "Soort tube", { options: TUBE }) + onbField("tube_diameter", "Tubediameter (cm)", { num: 1 }) + onbField("max_pk", "Max. motorvermogen (pk)", { num: 1 });
+    if (t === "Motorjacht" || t === "Kruiser" || t === "Trawler" || t === "Sportcruiser") return onbField("rompvorm", "Rompvorm", { options: ["Verdringer", "Halfplanerend", "Planerend", "Weet ik niet"] }) +
+      onbField("stuurstand", "Stuurstand", { options: ["Binnenstuurstand", "Buitenstuurstand", "Binnen en buiten", "Flybridge"] });
+    if (t === "Speedboot" || t === "Consoleboot") return onbField("max_pk", "Max. motorvermogen (pk)", { num: 1 }) +
+      onbField("trailer", "Trailer", { options: ["Geen trailer", "Geremde trailer", "Ongeremde trailer"] });
+    return "";
+  }
+  function onboardingScreen() {
+    var head = '<header class="ww-head"><div class="ww-head-row"><h1>Welkom' + (S.firstName ? ", " + esc(S.firstName) : "") + '!</h1></div>' +
+      '<p style="margin:6px 0 0;color:#C9D6E2">Maak eerst je bootprofiel. Dan kloppen je routes, onderdelen en het advies van Captain AI.</p></header>';
+    if (!onb.type) {
+      return head + '<section class="ww-section"><h2>Wat voor boot heb je?</h2><div class="ww-onb-grid">' +
+        ONB_TYPES.map(function (t) { return '<button type="button" class="ww-onb-type" data-onb-type="' + esc(t[0]) + '"><span>' + t[1] + "</span>" + esc(t[0]) + "</button>"; }).join("") +
+        '</div><label class="ww-field" style="margin-top:12px">Ander type<select class="ww-select" data-onb-other><option value="">Kies…</option>' +
+        ONB_OTHER.map(function (o) { return "<option>" + esc(o) + "</option>"; }).join("") + "</select></label></section>";
+    }
+    var t = onb.type, mast = t === "Zeiljacht" || t === "Catamaran" || t === "Platbodem";
+    return head + '<section class="ww-section"><form data-onb-form style="display:grid;gap:12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">' + esc(t) + '</h2><button type="button" class="ww-link" data-onb-back>Ander type</button></div>' +
+      onbField("naam_schip", "Naam van je boot", { ph: "bijv. Zeezwaluw" }) +
+      onbField("merk_boot", "Merk", { ph: "bijv. Zodiac, Linssen, Bavaria" }) + onbField("model_boot", "Model") +
+      onbField("bouwjaar_boot", "Bouwjaar", { num: 1 }) +
+      onbField("lengte", "Lengte (cm)", { num: 1 }) + onbField("diepgang", "Diepgang (cm)", { num: 1 }) +
+      (mast ? "" : onbField("doorvaarthoogte", "Doorvaarthoogte (cm)", { num: 1, ph: "hoogste punt boven water" })) +
+      onbTypeFields(t) +
+      '<h2 style="margin:8px 0 0">Motor</h2>' +
+      onbField("motormerk", "Merk motor", { ph: "bijv. Yamaha, Mercury, Volvo Penta" }) + onbField("motormodel", "Type motor", { ph: "bijv. F100, MD2020" }) +
+      onbField("motorvermogen", "Vermogen (pk)", { num: 1 }) +
+      onbField("brandstof", "Brandstof", { options: ["Benzine", "Diesel", "Elektrisch", "Hybride", "Geen motor"] }) +
+      (onb.error ? '<p class="ww-small" style="color:#B91C1C;margin:0">' + esc(onb.error) + "</p>" : "") +
+      '<button type="submit" class="ww-btn ww-btn-primary"' + (onb.saving ? " disabled" : "") + ">" + (onb.saving ? "Opslaan…" : "Bootprofiel aanmaken") + "</button>" +
+      '<p class="ww-small" style="margin:0;opacity:.8">Je kunt alles later aanvullen in je bootprofiel.</p></form></section>';
+  }
+  function readOnb(form) {
+    var fd = new FormData(form);
+    fd.forEach(function (v, k) { onb.data[k] = String(v); });
+  }
+  function saveOnb() {
+    var d = {};
+    Object.keys(onb.data).forEach(function (k) { if (onb.data[k]) d[k] = onb.data[k]; });
+    d.boottype = onb.type;
+    if (d.masthoogte && !d.doorvaarthoogte) d.doorvaarthoogte = d.masthoogte;
+    if (d.brandstof === "Geen motor") delete d.brandstof;
+    if (!d.naam_schip && !d.merk_boot && !d.model_boot) { onb.error = "Vul de naam, het merk of het model van je boot in."; render(); return; }
+    onb.saving = true; onb.error = ""; render();
+    fetch(S.appPath, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ intent: "profile_create", profile: d }) })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.success) throw new Error((data && data.message) || "Opslaan mislukt.");
+        S.boats = data.boats || []; S.boatId = data.boatId || (S.boats[0] && S.boats[0].id);
+        onb = { type: "", data: {}, saving: false, error: "" };
+        toast(data.message || "Bootprofiel aangemaakt");
+        setTab("home");
+      })
+      .catch(function (err) { onb.saving = false; onb.error = err.message; render(); });
+  }
+
   function render() {
+    if (!(S.boats || []).length) {
+      root.className = onb.intro ? "is-intro" : "";
+      root.innerHTML = onb.intro ? introScreen() : onboardingScreen();
+      if (onb.intro) bindIntro();
+      return;
+    }
     var screen = ui.tab === "kaart" ? kaartScreen() : ui.tab === "home" ? homeScreen() : ui.tab === "vaarinfo" ? vaarinfoScreen() : ui.tab === "boot" ? boatScreen() : ui.tab === "captain" ? captainScreen() : ui.tab === "service" ? serviceScreen() : shopScreen();
     root.className = ui.tab === "kaart" ? "is-map" : "";
     root.innerHTML = screen + nav() + (ui.sheet ? sheetHtml() : "");
@@ -1730,6 +1841,14 @@
     if (t.hasAttribute("data-route-open")) { e.preventDefault(); openRoutePanel(); return; }
     if (t.hasAttribute("data-route-here")) { if (map) map.closePopup(); planRoute(); return; }
     if (t.hasAttribute("data-route-clear")) { clearRoute(); var rs = document.querySelector("[data-map-sheet]"); if (rs) rs.hidden = true; return; }
+    if (t.hasAttribute("data-intro-next")) {
+      var tr = document.querySelector("[data-intro-track]");
+      if (tr) tr.scrollTo({ left: tr.clientWidth * Number(t.getAttribute("data-intro-next")), behavior: "smooth" });
+      return;
+    }
+    if (t.hasAttribute("data-intro-done")) { storageSet("ww-intro", "1"); onb.intro = false; render(); window.scrollTo(0, 0); return; }
+    if (t.hasAttribute("data-onb-type")) { onb.type = t.getAttribute("data-onb-type"); render(); window.scrollTo(0, 0); return; }
+    if (t.hasAttribute("data-onb-back")) { var f0 = document.querySelector("[data-onb-form]"); if (f0) readOnb(f0); onb.type = ""; render(); return; }
     if (t.hasAttribute("data-victron-refresh")) { loadVictron(true); render(); return; }
     if (t.hasAttribute("data-victron-all")) { vic.showAll = !vic.showAll; render(); return; }
     if (t.hasAttribute("data-victron-off")) {
@@ -1823,6 +1942,7 @@
   });
 
   root.addEventListener("change", function (e) {
+    if (e.target && e.target.hasAttribute && e.target.hasAttribute("data-onb-other") && e.target.value) { onb.type = e.target.value; render(); window.scrollTo(0, 0); return; }
     if (e.target && e.target.hasAttribute && e.target.hasAttribute("data-victron-site")) { victronPost({ intent: "site", siteId: Number(e.target.value) }); return; }
     var el = e.target;
     if (el && el.hasAttribute && el.hasAttribute("data-layer")) {
@@ -1864,6 +1984,7 @@
       setTimeout(function () { askCaptain(question); }, 30);
       return;
     }
+    if (form.hasAttribute("data-onb-form")) { e.preventDefault(); readOnb(form); saveOnb(); return; }
     if (form.hasAttribute("data-victron-form")) {
       e.preventDefault();
       var tok = String(new FormData(form).get("token") || "").trim();
