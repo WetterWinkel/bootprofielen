@@ -394,8 +394,20 @@
     if (g - w >= 2 || g >= bc.bad) { score -= g >= bc.bad ? 2 : 1; why.push("vlagen tot " + g + " Bft"); }
     if (day.rainProb != null) { if (day.rainProb >= 70) { score -= 3; why.push("grote kans op regen"); } else if (day.rainProb >= 40) { score -= 1.5; why.push("kans op een bui"); } }
     if (day.rain >= 5) score -= 1;
-    if (day.tmax != null) { if (day.tmax < 8) { score -= 2.5; why.push("koud"); } else if (day.tmax < 13) { score -= 1.5; why.push("fris"); } else if (day.tmax < 17) score -= 0.5; else if (day.tmax > 30) { score -= 0.5; why.push("heet"); } }
-    if (day.cloud != null && day.cloud < 40 && score > 6) score += 0.5;
+    // Temperatuur: kou weegt zwaar (gevoel, verkleuming, ijs op steigers en dek).
+    var tcap = 10;
+    if (day.tmax != null) {
+      if (day.tmax <= 0) { tcap = 2; why.unshift("vorst, kans op ijs"); }
+      else if (day.tmax < 4) { tcap = 3; why.unshift("erg koud"); }
+      else if (day.tmax < 7) { score -= 5; why.unshift("koud"); }
+      else if (day.tmax < 10) { score -= 2.5; why.push("koud"); }
+      else if (day.tmax < 14) { score -= 1.5; why.push("fris"); }
+      else if (day.tmax < 17) score -= 0.5;
+      else if (day.tmax > 30) { score -= 0.5; why.push("heet"); }
+    }
+    if (day.tmin != null && day.tmin < 0 && tcap > 4) { score -= 1; why.push("nachtvorst"); }
+    score = Math.min(score, tcap);
+    if (day.cloud != null && day.cloud < 40 && score > 6 && tcap === 10) score += 0.5;
     if (day.code >= 95) { score = Math.min(score, 2); why.unshift("onweer"); }
     if (day.code === 45 || day.code === 48) { score -= 1.5; why.push("mist"); }
     score = Math.max(1, Math.min(10, Math.round(score)));
