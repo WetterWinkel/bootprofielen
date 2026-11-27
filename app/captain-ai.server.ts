@@ -835,6 +835,7 @@ export async function answerCaptainQuestion(input: CaptainInput) {
     model,
     inputTokens: sumUsage("input_tokens"),
     outputTokens: sumUsage("output_tokens"),
+    webSearches: allResponses.flatMap((r: any) => r?.output ?? []).filter((item: any) => item?.type === "web_search_call").length,
   };
 }
 

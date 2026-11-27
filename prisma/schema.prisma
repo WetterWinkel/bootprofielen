@@ -118,6 +118,7 @@ model CaptainMessage {
   model          String?
   inputTokens    Int?
   outputTokens   Int?
+  webSearches    Int?
   usageType      CaptainUsageType?
   createdAt      DateTime            @default(now())
   conversation   CaptainConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

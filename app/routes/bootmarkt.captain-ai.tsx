@@ -742,6 +742,7 @@ ${salesFlowText({
           model: result.model,
           inputTokens: result.inputTokens,
           outputTokens: result.outputTokens,
+          webSearches: ((result as any).webSearches ?? null) as number | null,
         },
       }),
       prisma.captainConversation.update({

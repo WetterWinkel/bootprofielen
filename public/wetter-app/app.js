@@ -151,7 +151,8 @@
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ items: [{ id: id, quantity: 1 }] })
+      // Via Captain toegevoegd? Onzichtbaar regelkenmerk, zodat we de opbrengst van Captain kunnen meten.
+      body: JSON.stringify({ items: [ui.tab === "captain" ? { id: id, quantity: 1, properties: { _bron: "Captain AI" } } : { id: id, quantity: 1 }] })
     })
       .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
       .then(function (res) {

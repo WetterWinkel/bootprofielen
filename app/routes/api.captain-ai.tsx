@@ -793,6 +793,7 @@ export async function action({ request }: ActionFunctionArgs) {
           model: answer.model,
           inputTokens: answer.inputTokens,
           outputTokens: answer.outputTokens,
+          webSearches: ((answer as any).webSearches ?? null) as number | null,
         },
       });
 

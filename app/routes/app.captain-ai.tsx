@@ -9,6 +9,7 @@ import { useFetcher, useLoaderData, useRevalidator } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
+import { captainRoi } from "../lib/captain-roi.server";
 import { authenticate } from "../shopify.server";
 
 function jsonArray(value: unknown) {
@@ -115,6 +116,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       select: { visitorId: true },
     }),
   ]);
+  let roi: Awaited<ReturnType<typeof captainRoi>> | null = null;
+  let roiError = "";
+  try {
+    roi = await captainRoi(admin, session.shop, 30);
+  } catch (error: any) {
+    console.error("Captain-opbrengst berekenen mislukt", error);
+    roiError = String(error?.message || error);
+  }
   const names = await customerNames(
     admin,
     conversations
@@ -126,6 +135,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   );
 
   return {
+    roi,
+    roiError,
     stats: {
       conversations: conversationCount,
       messages: messageCount,
@@ -194,7 +205,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function CaptainAiAdmin() {
-  const { stats, storefront, conversations } = useLoaderData<typeof loader>();
+  const { stats, storefront, conversations, roi, roiError } = useLoaderData<typeof loader>();
+  const money = (n: number, cur = "EUR") => new Intl.NumberFormat("nl-NL", { style: "currency", currency: cur }).format(n);
   const fetcher = useFetcher<typeof action>();
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
@@ -211,6 +223,46 @@ export default function CaptainAiAdmin() {
 
   return (
     <s-page heading="Captain AI-beheer">
+      <s-section heading="Wat levert Captain op? — laatste 30 dagen">
+        {roi ? (
+          <s-stack direction="block" gap="base">
+            <s-text>
+              Omzet via Captain: <strong>{money(roi.revenue, roi.currency)}</strong> uit {roi.orders} bestelling(en)
+            </s-text>
+            <s-text>
+              Kosten Captain (schatting): <strong>${roi.costUsd.toFixed(2)}</strong> · {roi.questions} vragen · ca. $
+              {roi.costPerQuestionUsd.toFixed(3)} per vraag
+            </s-text>
+            <s-text>
+              {roi.revenuePerUsd != null
+                ? `Opbrengst: ${roi.revenuePerUsd.toLocaleString("nl-NL")} ${roi.currency === "EUR" ? "euro" : roi.currency} omzet per uitgegeven dollar`
+                : "Nog geen kosten gemeten in deze periode."}
+            </s-text>
+            <s-text>
+              Productregels via Captain-knop: {roi.lineItemsViaButton} · na Captain-advies gekocht (binnen 14 dagen): {roi.lineItemsViaAdvice}
+            </s-text>
+            {roi.topProducts.length > 0 && (
+              <s-stack direction="block" gap="small-200">
+                <s-text>Best verkocht via Captain:</s-text>
+                {roi.topProducts.map((p) => (
+                  <s-text key={p.title}>
+                    · {p.title} — {p.qty}× · {money(p.amount, roi.currency)}
+                  </s-text>
+                ))}
+              </s-stack>
+            )}
+            <s-paragraph>
+              Telt mee: producten die via de Captain-knop in de app in de winkelwagen kwamen, en producten die Captain aan
+              dezelfde ingelogde klant aanraadde binnen 14 dagen vóór de bestelling. Kosten zijn een schatting met
+              ${roi.prices.input}/${roi.prices.output} per miljoen tokens en ${roi.prices.search} per webzoekopdracht;
+              zoekopdrachten worden geteld vanaf 27 november 2026. Vergelijk af en toe met je OpenAI-factuur.
+            </s-paragraph>
+          </s-stack>
+        ) : (
+          <s-text>Berekenen lukt nu niet: {roiError || "onbekende fout"}</s-text>
+        )}
+      </s-section>
+
       <s-section heading="Webshopfunnel — laatste 24 uur">
         <s-stack direction="block" gap="base">
           <s-text>AI-schipperballon getoond: {storefront.tipViewed}</s-text>
