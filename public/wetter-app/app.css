@@ -309,3 +309,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ww-intro-dots i { width: 8px; height: 8px; border-radius: 99px; background: rgba(255,255,255,.35); transition: width .2s; }
 .ww-intro-dots i.is-on { width: 22px; background: #fff; }
 .ww-intro-skip { color: #fff !important; text-align: center; padding: 10px; min-height: 44px; }
+.ww-field.is-bad input, .ww-field.is-bad select { border-color: #DC2626 !important; background: #FEF2F2; }
+.ww-field.is-bad { color: #B91C1C; }
+.ww-go-home { width: 100%; display: grid; gap: 2px; padding: 14px; }
+.ww-go-home .ww-small { color: #D7E5F2; font-weight: 500; }
+.ww-home-btn { min-width: 44px; padding: 0 10px; font-size: 18px; }

@@ -291,7 +291,9 @@
         '<span class="ww-tile-title">' + esc(t.title) + '</span><span class="ww-tile-sub">' + esc(t.sub) + "</span></a>";
     }).join("") + "</div></section>";
 
-    return head + installHint() + captain + grid;
+    var hh = homeHaven();
+    var homeBtn = hh ? '<section class="ww-section" style="padding-top:0"><button type="button" class="ww-btn ww-btn-primary ww-go-home" data-go-home>🏠 Navigeer naar thuishaven<span class="ww-small">' + esc(hh.label) + "</span></button></section>" : "";
+    return head + installHint() + captain + homeBtn + grid;
   }
 
   // ---------- Vaarinformatie (Open-Meteo, testfase) ----------
@@ -463,7 +465,7 @@
       '<header class="ww-map-head"><a class="ww-icon-btn" href="#home" aria-label="Terug">' + ICON.back + "</a>" +
       '<div style="flex:1;min-width:0"><h1 style="font-size:19px;color:#fff">Vaarkaart</h1>' +
       '<button type="button" class="ww-airdraft" data-airdraft>' + (ad ? "Doorvaarthoogte boot: <strong>" + fmtM(ad) + "</strong> · wijzig" : "Stel je doorvaarthoogte in") + "</button></div>" +
-      '<span class="ww-map-speed" data-speed hidden></span><button type="button" class="ww-btn ww-btn-amber ww-btn-sm" data-route-open>Route</button></header>' +
+      '<span class="ww-map-speed" data-speed hidden></span>' + (homeHaven() ? '<button type="button" class="ww-btn ww-btn-ghost ww-btn-sm ww-home-btn" data-go-home aria-label="Navigeer naar thuishaven">🏠</button>' : "") + '<button type="button" class="ww-btn ww-btn-amber ww-btn-sm" data-route-open>Route</button></header>' +
       '<div class="ww-map-tools-left"><button type="button" class="ww-map-btn" data-layers aria-label="Kaartlagen">' + ICON.box + "</button></div>" +
       '<div class="ww-nav-bar" data-nav-bar hidden></div>' +
       '<div id="ww-map" class="ww-map" role="application" aria-label="Vaarkaart"></div>' +
@@ -505,6 +507,7 @@
       });
       loadMapData();
       drawMastroute();
+      if (ui.pendingHome) { ui.pendingHome = false; setTimeout(planRoute, 300); }
       loadStremmingen(function () {
         drawStremmingen();
         if (ui.pendingNotice && strem.byId[ui.pendingNotice]) {
@@ -1132,6 +1135,19 @@
     var bar = document.querySelector("[data-nav-bar]"); if (bar) bar.hidden = true;
   }
 
+  function homeHaven() {
+    var b = currentBoat(), d = (b && b.data) || {};
+    var lat = parseFloat(d.thuishaven_lat), lon = parseFloat(d.thuishaven_lon);
+    return isFinite(lat) && isFinite(lon) ? { label: d.thuishaven || "Thuishaven", lat: lat, lon: lon } : null;
+  }
+  function goHome() {
+    var h = homeHaven();
+    if (!h) { toast("Je thuishaven heeft nog geen positie. Vul hem aan in Je boot."); return; }
+    route.to = { label: h.label, lat: h.lat, lon: h.lon };
+    if (ui.tab !== "kaart") { ui.pendingHome = true; location.hash = "#kaart"; return; }
+    planRoute();
+  }
+
   function planRoute(attempt) {
     attempt = attempt || 0;
     var from = route.from;
@@ -1606,14 +1622,30 @@
   }
   var ONB_TYPES = [["Rubberboot", "🛟"], ["RIB", "🚤"], ["Motorjacht", "🛥️"], ["Zeiljacht", "⛵"], ["Speedboot", "💨"], ["Sloep", "🚣"]];
   var ONB_OTHER = ["Motorboot", "Tender", "Consoleboot", "Sportcruiser", "Kajuitboot", "Visboot", "Kruiser", "Trawler", "Platbodem", "Catamaran", "Houseboat / woonboot", "Anders"];
+  var MAST_T = { Zeiljacht: 1, Catamaran: 1, Platbodem: 1 }, MJ_T = { Motorjacht: 1, Kruiser: 1, Trawler: 1, Sportcruiser: 1 }, SP_T = { Speedboot: 1, Consoleboot: 1 };
+  function requiredKeys(d) {
+    var t = d.boottype || "";
+    var k = ["boottype", "naam_schip", "merk_boot", "model_boot", "bouwjaar_boot", "lengte", "diepgang", "thuishaven"];
+    if (MAST_T[t]) k.push("aantal_masten", "masthoogte", "mast_strijkbaar", "kieltype"); else k.push("doorvaarthoogte");
+    if (t === "Rubberboot") k.push("soort_bodem", "soort_tube", "max_pk");
+    if (t === "RIB") k.push("soort_bodem", "soort_tube", "tube_diameter", "max_pk");
+    if (MJ_T[t]) k.push("rompvorm", "stuurstand");
+    if (SP_T[t]) k.push("max_pk", "trailer");
+    k.push("soort_motor");
+    if (!/^geen motor/i.test(d.soort_motor || "")) k.push("motormerk", "motormodel", "motorvermogen", "brandstof");
+    return k;
+  }
+  function missingKeys(d) { return requiredKeys(d).filter(function (k) { return !String(d[k] == null ? "" : d[k]).trim(); }); }
   function onbField(name, label, opts) {
     opts = opts || {};
     var v = onb.data[name] || "";
+    var bad = onb.tried && !String(v).trim();
+    label = label + " *";
     if (opts.options) {
-      return '<label class="ww-field">' + esc(label) + '<select class="ww-select" name="' + name + '"><option value="">Kies…</option>' +
+      return '<label class="ww-field' + (bad ? " is-bad" : "") + '">' + esc(label) + '<select class="ww-select" name="' + name + '"' + (opts.rerender ? " data-onb-rerender" : "") + '><option value="">Kies…</option>' +
         opts.options.map(function (o) { return "<option" + (o === v ? " selected" : "") + ">" + esc(o) + "</option>"; }).join("") + "</select></label>";
     }
-    return '<label class="ww-field">' + esc(label) + '<input name="' + name + '" value="' + esc(v) + '"' + (opts.num ? ' inputmode="decimal"' : "") + (opts.ph ? ' placeholder="' + esc(opts.ph) + '"' : "") + "></label>";
+    return '<label class="ww-field' + (bad ? " is-bad" : "") + '">' + esc(label) + '<input name="' + name + '" value="' + esc(v) + '"' + (opts.num ? ' inputmode="decimal"' : "") + (opts.ph ? ' placeholder="' + esc(opts.ph) + '"' : "") + "></label>";
   }
   function onbTypeFields(t) {
     var TUBE = ["PVC", "Hypalon / CSM", "Hypalon-Neopreen", "ORCA (Hypalon)", "Polyurethaan (PU)", "Weet ik niet"];
@@ -1632,8 +1664,10 @@
     return "";
   }
   function onboardingScreen() {
-    var head = '<header class="ww-head"><div class="ww-head-row"><h1>Welkom' + (S.firstName ? ", " + esc(S.firstName) : "") + '!</h1></div>' +
-      '<p style="margin:6px 0 0;color:#C9D6E2">Maak eerst je bootprofiel. Dan kloppen je routes, onderdelen en het advies van Captain AI.</p></header>';
+    var head = onb.completeId
+      ? '<header class="ww-head"><div class="ww-head-row"><h1>Maak je bootprofiel compleet</h1></div><p style="margin:6px 0 0;color:#C9D6E2">Er missen nog een paar gegevens. Daarna werkt de hele app, en kent Captain AI je boot precies.</p></header>'
+      : '<header class="ww-head"><div class="ww-head-row"><h1>Welkom' + (S.firstName ? ", " + esc(S.firstName) : "") + '!</h1></div>' +
+        '<p style="margin:6px 0 0;color:#C9D6E2">Maak eerst je bootprofiel. Dan kloppen je routes, onderdelen en het advies van Captain AI.</p></header>';
     if (!onb.type) {
       return head + '<section class="ww-section"><h2>Wat voor boot heb je?</h2><div class="ww-onb-grid">' +
         ONB_TYPES.map(function (t) { return '<button type="button" class="ww-onb-type" data-onb-type="' + esc(t[0]) + '"><span>' + t[1] + "</span>" + esc(t[0]) + "</button>"; }).join("") +
@@ -1649,13 +1683,17 @@
       onbField("lengte", "Lengte (cm)", { num: 1 }) + onbField("diepgang", "Diepgang (cm)", { num: 1 }) +
       (mast ? "" : onbField("doorvaarthoogte", "Doorvaarthoogte (cm)", { num: 1, ph: "hoogste punt boven water" })) +
       onbTypeFields(t) +
+      onbField("thuishaven", "Thuishaven", { ph: "bijv. Jachthaven De Horne, Terherne" }) +
+      '<button type="button" class="ww-link" data-onb-gps style="justify-self:start;margin-top:-6px">' + (onb.data.thuishaven_lat ? "✓ Positie van je ligplaats opgeslagen" : "📍 Ik lig nu in mijn thuishaven — gebruik mijn positie") + "</button>" +
       '<h2 style="margin:8px 0 0">Motor</h2>' +
-      onbField("motormerk", "Merk motor", { ph: "bijv. Yamaha, Mercury, Volvo Penta" }) + onbField("motormodel", "Type motor", { ph: "bijv. F100, MD2020" }) +
-      onbField("motorvermogen", "Vermogen (pk)", { num: 1 }) +
-      onbField("brandstof", "Brandstof", { options: ["Benzine", "Diesel", "Elektrisch", "Hybride", "Geen motor"] }) +
+      onbField("soort_motor", "Soort motor", { rerender: 1, options: ["Buitenboord benzine", "Buitenboord elektrisch", "Binnenboord diesel", "Binnenboord benzine", "Binnenboord elektrisch", "Hybride", "Geen motor (zeilen/roeien)"] }) +
+      (/^geen motor/i.test(onb.data.soort_motor || "") ? "" :
+        onbField("motormerk", "Merk motor", { ph: "bijv. Yamaha, Mercury, Volvo Penta" }) + onbField("motormodel", "Type motor", { ph: "bijv. F100, MD2020 (staat op het typeplaatje)" }) +
+        onbField("motorvermogen", "Vermogen (pk)", { num: 1 }) +
+        onbField("brandstof", "Brandstof", { options: ["Benzine", "Diesel", "Elektrisch", "Hybride"] })) +
       (onb.error ? '<p class="ww-small" style="color:#B91C1C;margin:0">' + esc(onb.error) + "</p>" : "") +
-      '<button type="submit" class="ww-btn ww-btn-primary"' + (onb.saving ? " disabled" : "") + ">" + (onb.saving ? "Opslaan…" : "Bootprofiel aanmaken") + "</button>" +
-      '<p class="ww-small" style="margin:0;opacity:.8">Je kunt alles later aanvullen in je bootprofiel.</p></form></section>';
+      '<button type="submit" class="ww-btn ww-btn-primary"' + (onb.saving ? " disabled" : "") + ">" + (onb.saving ? "Opslaan…" : onb.completeId ? "Bootprofiel opslaan" : "Bootprofiel aanmaken") + "</button>" +
+      '<p class="ww-small" style="margin:0;opacity:.8">* Verplicht. Zo kan Captain AI precies de onderdelen voor jouw boot en motor vinden.</p></form></section>';
   }
   function readOnb(form) {
     var fd = new FormData(form);
@@ -1666,15 +1704,20 @@
     Object.keys(onb.data).forEach(function (k) { if (onb.data[k]) d[k] = onb.data[k]; });
     d.boottype = onb.type;
     if (d.masthoogte && !d.doorvaarthoogte) d.doorvaarthoogte = d.masthoogte;
-    if (d.brandstof === "Geen motor") delete d.brandstof;
-    if (!d.naam_schip && !d.merk_boot && !d.model_boot) { onb.error = "Vul de naam, het merk of het model van je boot in."; render(); return; }
+    var miss = missingKeys(d);
+    if (miss.length) {
+      onb.tried = true; onb.error = "Vul alle verplichte velden in (rood gemarkeerd)."; render();
+      var first = document.querySelector(".ww-field.is-bad"); if (first) first.scrollIntoView({ block: "center" });
+      return;
+    }
     onb.saving = true; onb.error = ""; render();
-    fetch(S.appPath, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ intent: "profile_create", profile: d }) })
+    var payload = onb.completeId ? { intent: "profile_complete", profileId: onb.completeId, profile: d } : { intent: "profile_create", profile: d };
+    fetch(S.appPath, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(payload) })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data || !data.success) throw new Error((data && data.message) || "Opslaan mislukt.");
         S.boats = data.boats || []; S.boatId = data.boatId || (S.boats[0] && S.boats[0].id);
-        onb = { type: "", data: {}, saving: false, error: "" };
+        onb = { type: "", data: {}, saving: false, error: "", intro: false };
         toast(data.message || "Bootprofiel aangemaakt");
         setTab("home");
       })
@@ -1682,6 +1725,13 @@
   }
 
   function render() {
+    var cb = currentBoat();
+    if (cb && missingKeys(cb.data || {}).length) {
+      if (onb.completeId !== cb.id) { onb = { type: (cb.data || {}).boottype || "", data: Object.assign({}, cb.data || {}), saving: false, error: "", intro: false, completeId: cb.id, tried: true }; }
+      root.className = "";
+      root.innerHTML = onboardingScreen();
+      return;
+    }
     if (!(S.boats || []).length) {
       root.className = onb.intro ? "is-intro" : "";
       root.innerHTML = onb.intro ? introScreen() : onboardingScreen();
@@ -1838,6 +1888,7 @@
       return;
     }
     if (t.hasAttribute("data-save-dest") && route.to) { toggleFav(route.to.lat, route.to.lon, route.to.label); t.textContent = isFav(route.to.lat, route.to.lon) ? "★ Bewaard" : "☆ Bewaar bestemming"; return; }
+    if (t.hasAttribute("data-go-home")) { e.preventDefault(); goHome(); return; }
     if (t.hasAttribute("data-route-open")) { e.preventDefault(); openRoutePanel(); return; }
     if (t.hasAttribute("data-route-here")) { if (map) map.closePopup(); planRoute(); return; }
     if (t.hasAttribute("data-route-clear")) { clearRoute(); var rs = document.querySelector("[data-map-sheet]"); if (rs) rs.hidden = true; return; }
@@ -1848,6 +1899,16 @@
     }
     if (t.hasAttribute("data-intro-done")) { storageSet("ww-intro", "1"); onb.intro = false; render(); window.scrollTo(0, 0); return; }
     if (t.hasAttribute("data-onb-type")) { onb.type = t.getAttribute("data-onb-type"); render(); window.scrollTo(0, 0); return; }
+    if (t.hasAttribute("data-onb-gps")) {
+      var fg = document.querySelector("[data-onb-form]"); if (fg) readOnb(fg);
+      if (!navigator.geolocation) { toast("Locatie is niet beschikbaar op dit toestel"); return; }
+      navigator.geolocation.getCurrentPosition(function (pos) {
+        onb.data.thuishaven_lat = pos.coords.latitude.toFixed(5); onb.data.thuishaven_lon = pos.coords.longitude.toFixed(5);
+        if (!onb.data.thuishaven) onb.data.thuishaven = "Mijn ligplaats";
+        render(); toast("Positie van je thuishaven opgeslagen");
+      }, function () { toast("Sta locatie toe om je ligplaats op te slaan"); }, { enableHighAccuracy: true, timeout: 15000 });
+      return;
+    }
     if (t.hasAttribute("data-onb-back")) { var f0 = document.querySelector("[data-onb-form]"); if (f0) readOnb(f0); onb.type = ""; render(); return; }
     if (t.hasAttribute("data-victron-refresh")) { loadVictron(true); render(); return; }
     if (t.hasAttribute("data-victron-all")) { vic.showAll = !vic.showAll; render(); return; }
@@ -1942,6 +2003,7 @@
   });
 
   root.addEventListener("change", function (e) {
+    if (e.target && e.target.hasAttribute && e.target.hasAttribute("data-onb-rerender")) { var fr = document.querySelector("[data-onb-form]"); if (fr) { readOnb(fr); render(); } return; }
     if (e.target && e.target.hasAttribute && e.target.hasAttribute("data-onb-other") && e.target.value) { onb.type = e.target.value; render(); window.scrollTo(0, 0); return; }
     if (e.target && e.target.hasAttribute && e.target.hasAttribute("data-victron-site")) { victronPost({ intent: "site", siteId: Number(e.target.value) }); return; }
     var el = e.target;

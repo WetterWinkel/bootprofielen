@@ -164,10 +164,82 @@ const PROFILE_KEYS = new Set([
   "motormerk", "motormodel", "motorvermogen", "aantal_motoren", "thuishaven", "vaargebied",
   "aantal_masten", "masthoogte", "tuigage", "kieltype", "mast_strijkbaar",
   "soort_bodem", "soort_tube", "tube_diameter", "luchtkamers", "console", "max_pk", "max_personen",
-  "rompvorm", "stuurstand", "trailer",
+  "rompvorm", "stuurstand", "trailer", "thuishaven_lat", "thuishaven_lon",
 ]);
 
-export async function createBootprofiel(admin: any, customerId: string, input: unknown) {
+// Thuishaven omzetten naar coördinaten (voor de knop "Naar thuishaven").
+// Eerst OpenStreetMap (vindt jachthavens op naam), anders PDOK (plaatsnaam).
+async function geocodeHaven(text: string): Promise<{ lat: number; lon: number } | null> {
+  const get = async (url: string) => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json", "User-Agent": "WetterWinkel-app/1.0 (+https://www.wetterwinkel.nl)" } });
+      return r.ok ? await r.json() : null;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const q = encodeURIComponent(text);
+  const osm: any = await get(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=nl,be,de&q=${q}`);
+  if (Array.isArray(osm) && osm[0]) return { lat: Number(osm[0].lat), lon: Number(osm[0].lon) };
+  const pdok: any = await get(`https://api.pdok.nl/bzk/locatieserver/search/v3_1/free?rows=1&fq=type:(woonplaats%20OR%20gemeente)&q=${q}`);
+  const m = String(pdok?.response?.docs?.[0]?.centroide_ll || "").match(/POINT\(([-\d.]+) ([-\d.]+)\)/);
+  return m ? { lat: Number(m[2]), lon: Number(m[1]) } : null;
+}
+async function withHavenCoords(data: Record<string, string>, before?: Record<string, any>) {
+  if (!data.thuishaven) return data;
+  const textChanged = !before || String(before.thuishaven || "") !== String(data.thuishaven);
+  const gpsGiven = Boolean(data.thuishaven_lat) && (!before || String(before.thuishaven_lat || "") !== String(data.thuishaven_lat));
+  if (gpsGiven) return data; // klant gaf zijn GPS-positie in de haven
+  if (!textChanged && data.thuishaven_lat) return data;
+  const c = await geocodeHaven(data.thuishaven).catch(() => null);
+  if (c && Number.isFinite(c.lat) && Number.isFinite(c.lon)) {
+    data.thuishaven_lat = c.lat.toFixed(5);
+    data.thuishaven_lon = c.lon.toFixed(5);
+  } else {
+    delete data.thuishaven_lat;
+    delete data.thuishaven_lon;
+  }
+  return data;
+}
+
+// Verplichte velden per boottype: zonder deze gegevens kan Captain AI geen
+// passende onderdelen en upsell voorstellen. (Zelfde lijst als in app.js.)
+const MAST_TYPES = new Set(["Zeiljacht", "Catamaran", "Platbodem"]);
+const MOTORJACHT_TYPES = new Set(["Motorjacht", "Kruiser", "Trawler", "Sportcruiser"]);
+const SPEED_TYPES = new Set(["Speedboot", "Consoleboot"]);
+const FIELD_NL: Record<string, string> = {
+  boottype: "soort boot", naam_schip: "naam", merk_boot: "merk", model_boot: "model", bouwjaar_boot: "bouwjaar",
+  lengte: "lengte", diepgang: "diepgang", doorvaarthoogte: "doorvaarthoogte", aantal_masten: "aantal masten",
+  masthoogte: "masthoogte", mast_strijkbaar: "mast strijkbaar", kieltype: "kiel", soort_bodem: "bodem",
+  soort_tube: "tube", tube_diameter: "tubediameter", max_pk: "max. vermogen", rompvorm: "rompvorm",
+  stuurstand: "stuurstand", trailer: "trailer", soort_motor: "soort motor", motormerk: "merk motor",
+  motormodel: "type motor", motorvermogen: "vermogen", brandstof: "brandstof", thuishaven: "thuishaven",
+};
+export function requiredProfileKeys(data: Record<string, any>) {
+  const t = String(data.boottype || "");
+  const keys = ["boottype", "naam_schip", "merk_boot", "model_boot", "bouwjaar_boot", "lengte", "diepgang", "thuishaven"];
+  if (MAST_TYPES.has(t)) keys.push("aantal_masten", "masthoogte", "mast_strijkbaar", "kieltype");
+  else keys.push("doorvaarthoogte");
+  if (t === "Rubberboot") keys.push("soort_bodem", "soort_tube", "max_pk");
+  if (t === "RIB") keys.push("soort_bodem", "soort_tube", "tube_diameter", "max_pk");
+  if (MOTORJACHT_TYPES.has(t)) keys.push("rompvorm", "stuurstand");
+  if (SPEED_TYPES.has(t)) keys.push("max_pk", "trailer");
+  keys.push("soort_motor");
+  if (!/^geen motor/i.test(String(data.soort_motor || ""))) keys.push("motormerk", "motormodel", "motorvermogen", "brandstof");
+  return keys;
+}
+export function missingProfileFields(data: Record<string, any>) {
+  return requiredProfileKeys(data).filter((k) => !String(data[k] ?? "").trim());
+}
+function assertComplete(data: Record<string, any>) {
+  const missing = missingProfileFields(data);
+  if (missing.length) throw new Error(`Vul nog in: ${missing.map((k) => FIELD_NL[k] || k).join(", ")}.`);
+}
+function cleanAppProfile(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Ongeldige bootgegevens.");
   const data: Record<string, string> = {};
   for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
@@ -175,8 +247,39 @@ export async function createBootprofiel(admin: any, customerId: string, input: u
     const text = String(value).trim().slice(0, 120);
     if (text) data[key] = text;
   }
+  return data;
+}
+
+export async function updateBootprofiel(admin: any, customerId: string, profileId: string, input: unknown) {
+  const boats = await ownedBoats(admin, customerId);
+  const boat = boats.find((b) => b.id === profileId);
+  if (!boat) throw new Error("Bootprofiel niet gevonden.");
+  const data = await withHavenCoords({ ...boat.data, ...cleanAppProfile(input) }, boat.data);
+  assertComplete(data);
+  const r: any = await (await admin.graphql(
+    `#graphql
+      mutation AppBootprofielBijwerken($id: ID!, $metaobject: MetaobjectUpdateInput!) {
+        metaobjectUpdate(id: $id, metaobject: $metaobject) { metaobject { id } userErrors { message } }
+      }`,
+    {
+      variables: {
+        id: profileId,
+        metaobject: { fields: [
+          { key: "naam", value: String(data.naam_schip || data.model_boot || data.merk_boot || "Boot") },
+          { key: "data", value: JSON.stringify(data) },
+        ] },
+      },
+    },
+  )).json();
+  const err = r.data?.metaobjectUpdate?.userErrors?.[0]?.message || r.errors?.[0]?.message;
+  if (err) throw new Error(err);
+}
+
+export async function createBootprofiel(admin: any, customerId: string, input: unknown) {
+  const data = cleanAppProfile(input);
   if (!data.boottype) throw new Error("Kies eerst wat voor boot je hebt.");
-  if (!data.naam_schip && !data.merk_boot && !data.model_boot) throw new Error("Vul de naam, het merk of het model van je boot in.");
+  assertComplete(data);
+  await withHavenCoords(data);
   data.aangemaakt_via = "app";
 
   const existing = await ownedBoats(admin, customerId);

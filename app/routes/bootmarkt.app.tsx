@@ -4,7 +4,7 @@
 // Nieuwe, losstaande route. Raakt geen bestaande Bootmarkt-, Captain AI- of
 // bootprofielroutes aan. Alleen zichtbaar voor klant-id's in
 // APP_PREVIEW_CUSTOMER_IDS (standaard alleen Bernard).
-import { createBootprofiel } from "../lib/wetter-app.server";
+import { createBootprofiel, missingProfileFields, updateBootprofiel } from "../lib/wetter-app.server";
 import { ensureStremmingen } from "../lib/stremmingen.server";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import prisma from "../db.server";
@@ -22,7 +22,7 @@ import {
 } from "../lib/wetter-app.server";
 
 const APP_PATH = "/apps/bootmarkt/app";
-const ASSET_VERSION = "19";
+const ASSET_VERSION = "20";
 
 function assetBase() {
   return `${(process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "")}/wetter-app`;
@@ -152,7 +152,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       iconUrl: `${assetBase()}/icon-192.png`,
       assetBase: assetBase(),
       firstName,
-      boats: boats.map((item) => ({ id: item.id, name: boatName(item), data: item.data })),
+      boats: boats.map((item) => ({ id: item.id, name: boatName(item), data: item.data, missing: missingProfileFields(item.data) })),
       boatId: boat?.id || "",
       products,
       entries,
@@ -179,6 +179,17 @@ export async function action({ request }: ActionFunctionArgs) {
     const { admin } = await unauthenticated.admin(shop);
     const customerId = customerGid(rawCustomerId);
     const body = await request.json();
+    if (body.intent === "profile_complete") {
+      await updateBootprofiel(admin, customerId, String(body.profileId || ""), body.profile);
+      const boats = await ownedBoats(admin, customerId);
+      return json({
+        success: true,
+        message: "Je bootprofiel is compleet. Captain AI kent je boot nu precies.",
+        boatId: String(body.profileId),
+        boats: boats.map((b) => ({ id: b.id, name: boatName(b), data: b.data, missing: missingProfileFields(b.data) })),
+      });
+    }
+
     if (body.intent === "profile_create") {
       const id = await createBootprofiel(admin, customerId, body.profile);
       const boats = await ownedBoats(admin, customerId);
@@ -186,7 +197,7 @@ export async function action({ request }: ActionFunctionArgs) {
         success: true,
         message: "Je bootprofiel is aangemaakt. Welkom aan boord!",
         boatId: id,
-        boats: boats.map((b) => ({ id: b.id, name: boatName(b), data: b.data })),
+        boats: boats.map((b) => ({ id: b.id, name: boatName(b), data: b.data, missing: missingProfileFields(b.data) })),
       });
     }
 
