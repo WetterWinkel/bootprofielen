@@ -143,6 +143,17 @@
       })
       .catch(function () { /* stil */ });
   }
+  // Anonieme gebruiksstatistiek voor het beheerportaal (alleen wat er gebeurt, geen inhoud).
+  var tracked = {};
+  function track(event, detail, once) {
+    var key = event + ":" + (detail || "");
+    if (once && tracked[key]) return;
+    tracked[key] = true;
+    try {
+      fetch(S.appPath + "/event", { method: "POST", credentials: "same-origin", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event: event, detail: detail || "" }) }).catch(function () {});
+    } catch (e) { /* stil */ }
+  }
+
   function addToCart(variantId, button) {
     var id = Number(numericId(variantId));
     if (!id) return;
@@ -159,6 +170,7 @@
         if (!res.ok) throw new Error(res.data && (res.data.description || res.data.message) || "Toevoegen mislukt");
         if (button) { button.classList.add("is-done"); button.innerHTML = ICON.check; }
         toast("In je winkelwagen", "/checkout", "Afrekenen");
+        track("APP_CART", ui.tab);
         refreshCart();
       })
       .catch(function (err) { toast(err.message || "Toevoegen mislukt"); })
@@ -1198,6 +1210,7 @@
     return isFinite(lat) && isFinite(lon) ? { label: d.thuishaven || "Thuishaven", lat: lat, lon: lon } : null;
   }
   function goHome() {
+    track("APP_NAV_HOME");
     var h = homeHaven();
     if (!h) { toast("Je thuishaven heeft nog geen positie. Vul hem aan in Je boot."); return; }
     route.to = { label: h.label, lat: h.lat, lon: h.lon };
@@ -1206,6 +1219,7 @@
   }
 
   function planRoute(attempt) {
+    if (!attempt) track("APP_ROUTE", mastMode() ? "mast" : "");
     attempt = attempt || 0;
     var from = route.from;
     if (!from) {
@@ -1391,7 +1405,7 @@
     vic.busy = true; render();
     return fetch(S.appPath + "/victron", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) })
       .then(function (r) { return r.json(); })
-      .then(function (d) { vic.busy = false; if (d.success) { vic.data = d; vic.error = ""; vic.at = Date.now(); } else vic.error = d.message || "Dat lukte niet."; if (d.message) toast(d.message); render(); })
+      .then(function (d) { vic.busy = false; if (d.success && body.intent === "connect") track("APP_VICTRON"); if (d.success) { vic.data = d; vic.error = ""; vic.at = Date.now(); } else vic.error = d.message || "Dat lukte niet."; if (d.message) toast(d.message); render(); })
       .catch(function () { vic.busy = false; vic.error = "Dat lukte niet. Probeer het opnieuw."; render(); });
   }
   function fmtW(w) { return w == null ? "–" : Math.abs(w) >= 1000 ? (w / 1000).toFixed(1).replace(".", ",") + " kW" : Math.round(w) + " W"; }
@@ -1768,6 +1782,7 @@
       return;
     }
     onb.saving = true; onb.error = ""; render();
+    track(onb.completeId ? "APP_PROFILE_COMPLETED" : "APP_PROFILE_CREATED", onb.type);
     var payload = onb.completeId ? { intent: "profile_complete", profileId: onb.completeId, profile: d } : { intent: "profile_create", profile: d };
     fetch(S.appPath, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(payload) })
       .then(function (r) { return r.json(); })
@@ -1782,6 +1797,9 @@
   }
 
   function render() {
+    track("APP_OPEN", "", true);
+    if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) track("APP_INSTALLED", "", true);
+    if (ui.tab) track("APP_TAB", ui.tab, true);
     var cb = currentBoat();
     if (cb && missingKeys(cb.data || {}).length) {
       if (onb.completeId !== cb.id) { onb = { type: (cb.data || {}).boottype || "", data: Object.assign({}, cb.data || {}), saving: false, error: "", intro: false, completeId: cb.id, tried: true }; }
@@ -1830,6 +1848,7 @@
       .then(function () { ui.captainLoading = false; if (ui.tab === "captain") render(); });
   }
   function askCaptain(question) {
+    track("APP_CAPTAIN");
     question = String(question || "").trim();
     if (!question || ui.captainSending) return;
     if (!ui.captain) ui.captain = { history: [] };
@@ -1954,7 +1973,7 @@
       if (tr) tr.scrollTo({ left: tr.clientWidth * Number(t.getAttribute("data-intro-next")), behavior: "smooth" });
       return;
     }
-    if (t.hasAttribute("data-intro-done")) { storageSet("ww-intro", "1"); onb.intro = false; render(); window.scrollTo(0, 0); return; }
+    if (t.hasAttribute("data-intro-done")) { track(t.classList.contains("ww-intro-skip") ? "APP_INTRO_SKIP" : "APP_INTRO_DONE"); storageSet("ww-intro", "1"); onb.intro = false; render(); window.scrollTo(0, 0); return; }
     if (t.hasAttribute("data-onb-type")) { onb.type = t.getAttribute("data-onb-type"); render(); window.scrollTo(0, 0); return; }
     if (t.hasAttribute("data-onb-gps")) {
       var fg = document.querySelector("[data-onb-form]"); if (fg) readOnb(fg);
